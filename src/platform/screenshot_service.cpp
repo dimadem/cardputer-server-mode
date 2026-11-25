@@ -93,6 +93,11 @@ bool write_png(const std::filesystem::path& path,
         return false;
     }
 
+    const auto width = static_cast<png_uint_32>(snapshot->header.w);
+    const auto height = static_cast<png_uint_32>(snapshot->header.h);
+    // allocated before setjmp: a longjmp from libpng must not skip a destructor
+    std::vector<uint8_t> row(static_cast<std::size_t>(width) * 4U);
+
     if (setjmp(png_jmpbuf(png))) {
         png_destroy_write_struct(&png, &info);
         std::fclose(file);
@@ -100,8 +105,6 @@ bool write_png(const std::filesystem::path& path,
         return false;
     }
 
-    const auto width = static_cast<png_uint_32>(snapshot->header.w);
-    const auto height = static_cast<png_uint_32>(snapshot->header.h);
     png_init_io(png, file);
     png_set_IHDR(png,
                  info,
@@ -114,7 +117,6 @@ bool write_png(const std::filesystem::path& path,
                  PNG_FILTER_TYPE_DEFAULT);
     png_write_info(png, info);
 
-    std::vector<uint8_t> row(static_cast<std::size_t>(width) * 4U);
     const auto* source = static_cast<const uint8_t*>(snapshot->data);
     for (png_uint_32 y = 0; y < height; ++y) {
         const auto* source_row = source + static_cast<std::size_t>(y) * snapshot->header.stride;

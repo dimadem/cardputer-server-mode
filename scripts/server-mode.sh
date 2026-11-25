@@ -19,12 +19,13 @@ mkdir -p "$STATE_DIR"
 before=$(mem_avail_mb)
 
 units=""
+# At boot into multi-user.target the desktop does not start, whatever the groups are:
+# record it so that normal mode starts it.
+if [ $boot = 1 ] && unit_exists lightdm.service; then units=" lightdm.service"; fi
 for g in $groups; do
   for u in $(group_units "$g"); do
-    # at boot into multi-user the desktop is not running yet, but normal mode must start it
-    if systemctl is-active --quiet "$u" || { [ $boot = 1 ] && [ "$u" = lightdm.service ]; }; then
-      units="$units $u"
-    fi
+    case "$units " in *" $u "*) continue ;; esac
+    systemctl is-active --quiet "$u" && units="$units $u"
   done
 done
 user_units=""
@@ -46,7 +47,8 @@ for u in $units; do
   if systemctl stop "$u"; then echo "stopped: $u"; else echo "failed to stop: $u" >&2; failed=1; fi
 done
 for u in $user_units; do
-  user_systemctl stop "$u" 2>/dev/null && echo "stopped (user): $u"
+  if user_systemctl stop "$u" 2>/dev/null; then echo "stopped (user): $u"
+  else echo "failed to stop (user): $u" >&2; failed=1; fi
 done
 
 echo "server mode on. MemAvailable: ${before} MB -> $(mem_avail_mb) MB"

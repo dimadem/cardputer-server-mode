@@ -1,11 +1,12 @@
 # shared settings for the Server Mode helper scripts (sourced, not run)
 # shellcheck shell=bash disable=SC2034  # the variables are used by the scripts that source this file
+umask 022   # the app runs without root and must read the state file whatever umask sudo passes
 STATE_DIR=/run/cz-server-mode          # tmpfs: a reboot always forgets the runtime state
 STATE_FILE=$STATE_DIR/stopped-units
 LOCK_FILE=/run/cz-server-mode.lock
 
 # Groups the app can ask server-mode.sh to stop (all of them when none is given).
-# Keep in sync with settings::stop_groups() in src/view/screens/server_settings.cpp.
+# Keep in sync with settings::kStopGroups in src/view/screens/server_settings.h.
 # Always kept: APPLaunch (CardputerZero screen), bluetooth (the launcher needs it),
 # NetworkManager/wpa_supplicant (Wi-Fi), ssh, avahi (.local names), pipewire (audio), udisks2 (Files).
 ALL_GROUPS="desktop printing packagekit portals accounts nfs"
@@ -28,6 +29,8 @@ USER_UNITS="xdg-desktop-portal.service xdg-desktop-portal-gtk.service xdg-deskto
 
 # System units started on demand (D-Bus): normal mode does not start them by hand.
 ON_DEMAND_UNITS="packagekit.service"
+
+unit_exists() { systemctl cat "$1" >/dev/null 2>&1; }
 
 need_root() { [ "$(id -u)" = 0 ] || { echo "run as root (sudo)" >&2; exit 1; }; }
 

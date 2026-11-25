@@ -134,10 +134,16 @@ void key_event_cb(lv_event_t* event) {
 }
 
 #if !USE_DESKTOP
-bool shift_down = false;
+// each Shift key separately: releasing one while the other is held keeps Shift on
+bool left_shift_down = false;
+bool right_shift_down = false;
+
+bool shift_down() {
+    return left_shift_down || right_shift_down;
+}
 
 char shifted(char normal, char with_shift) {
-    return shift_down ? with_shift : normal;
+    return shift_down() ? with_shift : normal;
 }
 
 uint32_t map_evdev_key(uint16_t code) {
@@ -154,7 +160,7 @@ uint32_t map_evdev_key(uint16_t code) {
     };
     for (const auto& letter : kLetters) {
         if (letter.code == code) {
-            return static_cast<uint32_t>(shift_down ? letter.ch - 'a' + 'A' : letter.ch);
+            return static_cast<uint32_t>(shift_down() ? letter.ch - 'a' + 'A' : letter.ch);
         }
     }
 
@@ -223,12 +229,22 @@ void evdev_read_cb(lv_indev_t* indev, lv_indev_data_t* data) {
 
     input_event input{};
     while (read(keypad->fd, &input, sizeof(input)) == sizeof(input)) {
+        if (input.type == EV_SYN && input.code == SYN_DROPPED) {
+            // the kernel dropped events: a Shift release may be lost
+            left_shift_down = false;
+            right_shift_down = false;
+            continue;
+        }
         if (input.type != EV_KEY) {
             continue;
         }
 
-        if (input.code == KEY_LEFTSHIFT || input.code == KEY_RIGHTSHIFT) {
-            shift_down = input.value != 0;
+        if (input.code == KEY_LEFTSHIFT) {
+            left_shift_down = input.value != 0;
+            continue;
+        }
+        if (input.code == KEY_RIGHTSHIFT) {
+            right_shift_down = input.value != 0;
             continue;
         }
 

@@ -43,14 +43,15 @@ private:
     enum class Prompt { None, Apply, Reset }; // what Enter in the password prompt does
 
     // One row. Which fields matter depends on kind:
-    // Group uses group + value, Flag uses flag + value, Gpu uses gpu.
+    // Group uses group + value, Flag uses flag + value, Gpu uses gpu
+    // (nullopt: config.txt has a value that is not one of kGpuChoices, kept until changed).
     struct Item {
         Kind kind{Kind::Header};
         std::string_view title;
         settings::StopGroup group{settings::StopGroup::Desktop};
         settings::BootFlag flag{settings::BootFlag::BootServer};
         bool value{false};
-        settings::GpuMemory gpu{settings::GpuMemory::Mb128};
+        std::optional<settings::GpuMemory> gpu = std::nullopt;
         lv_obj_t* row{nullptr};
         lv_obj_t* label{nullptr};       // name, left
         lv_obj_t* value_label{nullptr}; // state, right
@@ -65,13 +66,14 @@ private:
     bool boot_groups_outdated() const;
     bool item_changed(const Item& item) const;
     bool has_boot_changes() const;
+    bool boot_server_chosen() const;
     std::vector<std::string> changed_args() const;
     void add_item(Item item);
     void render_item(size_t index);
     void render_all();
     void move_selection(int delta);
     void change_value(int delta);
-    void save_groups();
+    bool save_groups();
     void ask_password(Prompt prompt);
     void cancel_password();
     void start_job();

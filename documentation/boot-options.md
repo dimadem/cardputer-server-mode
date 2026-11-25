@@ -19,6 +19,14 @@ advanced.sh reset [--reboot]               # go back to the original files
 
 The app sends only the changed keys. When "Boot into server mode" is on, the app also sends `groups=`.
 
+The script examines all arguments before it changes a file. If an argument is not correct, the script changes nothing and stops with exit code 2. These arguments are not correct:
+
+- A value other than 0 or 1 for `camera_off`, `hdmi_off`, `cloudinit_off` and `boot_server`.
+- An empty `groups=`, or a group name that is not known.
+- `boot_server=1` without `groups=`.
+
+The app does not let you apply "Boot into server mode" when you select no group.
+
 ### GPU memory
 
 On a Raspberry Pi, the minimum value of `gpu_mem` is 16. A value of 8 is not possible. With 16 MB, the camera and the hardware video codecs do not operate, and the app shows a message about this. The CardputerZero screen and the console operate correctly.
@@ -33,6 +41,8 @@ When `boot_server=1`, the script makes this unit:
 [Unit]
 Description=CardputerZero Server Mode at boot
 After=network.target cups.service accounts-daemon.service rpcbind.service
+# the package was removed without "advanced.sh reset": do nothing
+ConditionFileIsExecutable=/usr/lib/cz-server-mode/server-mode.sh
 
 [Service]
 Type=oneshot
@@ -51,14 +61,15 @@ When `boot_server=0`, the script removes the unit and sets the default target to
 
 The script has these protections for the boot files:
 
-- At the first `apply`, the script makes the copies `config.txt.cz-orig` and `cmdline.txt.cz-orig`.
+- At the first `apply`, the script makes the copies `config.txt.cz-orig` and `cmdline.txt.cz-orig`. If a copy is empty (for example, after a power failure), the next `apply` makes the copy again.
 - The script changes the work copies `*.cz-new`. It writes a work copy to the boot file only if the content is different (`cmp`).
-- Each write is atomic: copy to a temporary file, `sync`, `mv`, `sync`. If the power goes off, the file is the old file or the full new file.
+- Each write goes through a temporary file: copy, `sync`, `mv`, `sync`. The script never writes the boot file directly. The boot partition uses FAT, and a rename on FAT is not atomic. Thus, a power failure at the time of a write can cause damage to the file. This risk is small. Do not remove the power during an `apply`.
+- The script writes `gpu_mem=` only before the first section or in the `[all]` section. If the file has no such line, the script adds it in an `[all]` section at the end.
 - Before the script adds `gpu_mem=`, it makes sure that the file ends with a newline.
 
 ## Reset
 
-The `reset` command copies the two files back from `*.cz-orig`. The script removes the copies only after it restores the two files. Then it removes the boot service, sets `graphical.target` and enables cloud-init again.
+The "Reset all to defaults" row operates also when the app cannot read the boot status. The `reset` command copies the two files back from `*.cz-orig`. If a copy is empty, the script does not restore it and stops with exit code 1. The script removes the copies only after it restores the two files. Then it removes the boot service, sets `graphical.target` and enables cloud-init again.
 
 ## Reboot
 

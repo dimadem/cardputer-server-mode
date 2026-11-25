@@ -76,7 +76,7 @@ You can start the binary file from APPLaunch without a package. To do this, make
 [Desktop Entry]
 Name=Server Mode (dev)
 Exec=/home/<user>/cz-server-mode/build/cp0-native/Release/cz_server_mode
-Icon=share/images/files.png
+Icon=share/images/cz_server_mode.png
 Terminal=false
 Type=Application
 ```
@@ -113,6 +113,6 @@ sudo apt install --no-install-recommends ./ServerMode_0.1.0_rev1_arm64.deb
 
 To publish the app, do these steps:
 
-1. Write the `store` section in `app-builder.json`. At this time, it contains the values of the template.
-2. Make an icon and screenshots for the app.
+1. Make two screenshots on the board (Fn+J). Put them in `screenshot/`. The size is 320×170.
+2. Write the screenshot paths and `share_code` in `app-builder.json`. The other fields of the `store` section have their values. The icon is `assets/images/cz_server_mode.png`.
 3. Send a pull request to the CardputerZero/packages repository.

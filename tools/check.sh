@@ -21,6 +21,9 @@ HEADERS=(src/view/screens/{server_panel,advanced_panel,sudo_job,server_settings,
 
 status=0
 step() { printf '\n== %s\n' "$1"; }
+for tool in clang-format clang-tidy cppcheck; do
+  command -v "$tool" >/dev/null || { echo "$tool not found: install it (see the header)"; exit 2; }
+done
 
 step clang-format
 if [ "${1:-}" = --fix-format ]; then
@@ -39,13 +42,14 @@ fi
 step "cppcheck (bugs, dead code)"
 mkdir -p "$BUILD/cppcheck"
 # --include: cppcheck does not expand LV_CONF_PATH, so without it every LV_USE_* reads as 0.
-# The Logger and reactive:: wrappers are general APIs that the app uses only in part; inline
+# The Logger and reactive:: wrappers (subjects, bindings) are general APIs that the app uses only in part; inline
 # unusedFunction suppressions are ignored with -j, so they are suppressed here.
 cppcheck --project="$BUILD/compile_commands.json" --enable=warning,style,performance,portability,unusedFunction \
   --cppcheck-build-dir="$BUILD/cppcheck" -i "$PWD/.cache" -i "$PWD/build" \
   --include="$PWD/src/config/lv_conf.h" \
   --suppress="*:$PWD/.cache/*" --suppress=useStlAlgorithm \
-  --suppress="unusedFunction:src/logger/*" --suppress="unusedFunction:src/reactive/subjects.*" \
+  --suppress="unusedFunction:$PWD/src/logger/*" --suppress="unusedFunction:$PWD/src/reactive/*" \
+  --suppress="unusedFunction:src/logger/*" --suppress="unusedFunction:src/reactive/*" \
   --suppress=missingIncludeSystem --inline-suppr --quiet --error-exitcode=1 \
   --std=c++17 --check-level=exhaustive -j2 2>&1 || status=1
 

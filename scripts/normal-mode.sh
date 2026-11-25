@@ -14,7 +14,9 @@ before=$(mem_avail_mb)
 failed_units=""
 for u in $(tac "$STATE_FILE"); do
   case " $ON_DEMAND_UNITS " in *" $u "*) continue ;; esac
-  if systemctl start "$u"; then echo "started: $u"; else echo "failed to start: $u" >&2; failed_units="$failed_units $u"; fi
+  unit_exists "$u" || { echo "not installed, skipped: $u"; continue; }
+  # prepend: the file keeps the original order, so the next retry also runs in reverse
+  if systemctl start "$u"; then echo "started: $u"; else echo "failed to start: $u" >&2; failed_units=" $u$failed_units"; fi
 done
 
 if [ -n "$failed_units" ]; then

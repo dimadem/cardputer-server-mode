@@ -51,7 +51,7 @@ std::optional<long> meminfo_kb(const char* line, std::string_view key) {
     return value;
 }
 
-MemInfo read_meminfo() {
+std::optional<MemInfo> read_meminfo() {
     long total = 0;
     long avail = 0;
     long swap_total = 0;
@@ -62,21 +62,26 @@ MemInfo read_meminfo() {
         {"SwapTotal:", &swap_total},
         {"SwapFree:", &swap_free},
     }};
-    if (FILE* file = std::fopen("/proc/meminfo", "r")) {
-        char line[128];
-        size_t found = 0;
-        while (found < fields.size() && std::fgets(line, sizeof(line), file) != nullptr) {
-            for (const auto& [key, target] : fields) {
-                if (const auto kb = meminfo_kb(line, key)) {
-                    *target = *kb;
-                    ++found;
-                    break;
-                }
+    FILE* file = std::fopen("/proc/meminfo", "r");
+    if (file == nullptr) {
+        return std::nullopt;
+    }
+    char line[128];
+    size_t found = 0;
+    while (found < fields.size() && std::fgets(line, sizeof(line), file) != nullptr) {
+        for (const auto& [key, target] : fields) {
+            if (const auto kb = meminfo_kb(line, key)) {
+                *target = *kb;
+                ++found;
+                break;
             }
         }
-        std::fclose(file);
     }
-    return {total / 1024, avail / 1024, (swap_total - swap_free) / 1024};
+    std::fclose(file);
+    if (found < fields.size()) {
+        return std::nullopt;
+    }
+    return MemInfo{total / 1024, avail / 1024, (swap_total - swap_free) / 1024};
 }
 
 bool process_is(pid_t pid, std::string_view name) {
@@ -249,13 +254,19 @@ void ServerPanel::refresh_status() {
     const auto colors = view::palette(view_model_.is_dark_mode());
     set_text_if_changed(mode_label_, server ? "Mode: SERVER" : "Mode: normal");
     lv_obj_set_style_text_color(mode_label_, server ? colors.success : colors.warning, 0);
-    std::snprintf(text, sizeof(text), "Free %ld of %ld MB", mem.avail_mb, mem.total_mb);
-    set_text_if_changed(mem_label_, text);
-    std::snprintf(text,
-                  sizeof(text),
-                  "Swap %ld MB · desktop %s",
-                  mem.swap_used_mb,
-                  desktop ? "running" : "stopped");
+    if (mem) {
+        std::snprintf(text, sizeof(text), "Free %ld of %ld MB", mem->avail_mb, mem->total_mb);
+        set_text_if_changed(mem_label_, text);
+        std::snprintf(text,
+                      sizeof(text),
+                      "Swap %ld MB · desktop %s",
+                      mem->swap_used_mb,
+                      desktop ? "running" : "stopped");
+    }
+    else {
+        set_text_if_changed(mem_label_, "Memory: unavailable");
+        std::snprintf(text, sizeof(text), "desktop %s", desktop ? "running" : "stopped");
+    }
     set_text_if_changed(detail_label_, text);
 }
 
@@ -323,14 +334,20 @@ void ServerPanel::finish_switch(const JobResult& result) {
     switch (result.outcome) {
         case JobOutcome::Success: set_message(success_summary(output), Tone::Success); return;
         case JobOutcome::WrongPassword: set_message("Wrong password", Tone::Error); return;
+        case JobOutcome::NotAllowed:
+            set_message("sudo: not allowed for this user", Tone::Error);
+            return;
         case JobOutcome::Busy:
             set_message("Busy: another switch is running", Tone::Warning);
             return;
         case JobOutcome::NotFound: set_message("sudo or script not found", Tone::Error); return;
         case JobOutcome::Killed: set_message("Switch was killed (see log)", Tone::Error); return;
-        case JobOutcome::PartialFailure:
         case JobOutcome::BadArguments:
-        case JobOutcome::OtherError: break;
+        case JobOutcome::OtherError:
+            set_message("Error, code " + std::to_string(result.exit_code) + " (see log)",
+                        Tone::Error);
+            return;
+        case JobOutcome::PartialFailure: break;
     }
     set_message("Partly failed, code " + std::to_string(result.exit_code) + " (see log)",
                 Tone::Error);

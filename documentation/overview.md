@@ -47,6 +47,7 @@ The result can be one of these messages:
 
 - "Done: 130 MB -> 184 MB". The two numbers show the available memory (MemAvailable) before and after the switch.
 - "Wrong password".
+- "sudo: not allowed for this user". The sudo rules do not let the user start the script.
 - "Busy: another switch is running". A different switch did not stop at that time.
 - An error code.
 

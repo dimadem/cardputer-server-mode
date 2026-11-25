@@ -79,7 +79,7 @@
 
 #define LV_USE_LOG                         1
 
-#define LV_LOG_LEVEL                       LV_LOG_LEVEL_INFO
+#define LV_LOG_LEVEL                       LV_LOG_LEVEL_WARN
 
 /* Printf backend */
 #define LV_LOG_PRINTF                      1

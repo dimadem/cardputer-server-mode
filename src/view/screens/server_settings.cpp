@@ -122,9 +122,20 @@ bool save_enabled_groups(const GroupSet& groups) {
     const auto path = groups_file();
     std::error_code ec;
     std::filesystem::create_directories(path.parent_path(), ec);
-    std::ofstream file(path, std::ios::trunc);
-    for (const auto& id : groups.ids()) file << id << "\n";
-    return static_cast<bool>(file);
+    // temp file + rename: a failed write leaves the old file in place
+    auto temp = path;
+    temp += ".tmp";
+    {
+        std::ofstream file(temp, std::ios::trunc);
+        for (const auto& id : groups.ids()) file << id << "\n";
+        file.close();
+        if (!file) {
+            std::filesystem::remove(temp, ec);
+            return false;
+        }
+    }
+    std::filesystem::rename(temp, path, ec);
+    return !ec;
 }
 
 // ---- scripts

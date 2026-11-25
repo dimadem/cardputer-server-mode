@@ -6,6 +6,7 @@
 
 #include "lvgl.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <csignal>
 #include <cstring>
@@ -13,7 +14,22 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+extern char** environ; // NOLINT(readability-redundant-declaration): POSIX, not in every header
+
 namespace screen {
+namespace {
+
+constexpr size_t kMaxOutput = size_t{64} * 1024; // the scripts print a few lines; more is cut
+
+// dup2 that also works when the fd is already the target: then O_CLOEXEC is cleared instead.
+bool move_fd(int fd, int target) {
+    if (fd == target) {
+        return fcntl(fd, F_SETFD, 0) == 0;
+    }
+    return dup2(fd, target) == target;
+}
+
+} // namespace
 
 SudoJob::~SudoJob() {
     // Never kill or abandon a running script: it may be half-way through boot
@@ -43,6 +59,11 @@ bool SudoJob::wrong_password(const std::string& output) {
            output.find("password is required") != std::string::npos;
 }
 
+bool SudoJob::not_allowed(const std::string& output) {
+    return output.find("is not in the sudoers file") != std::string::npos ||
+           output.find("is not allowed to") != std::string::npos;
+}
+
 bool SudoJob::start(std::string& password,
                     const std::vector<std::string>& argv,
                     std::string& error) {
@@ -61,6 +82,15 @@ bool SudoJob::start(std::string& password,
         args.push_back(const_cast<char*>(arg.c_str()));
     }
     args.push_back(nullptr);
+
+    // The environment is built before fork: the child only calls async-signal-safe functions.
+    // LC_ALL=C keeps the sudo messages in English, so wrong_password() can match them.
+    std::vector<char*> env;
+    for (char** var = environ; var != nullptr && *var != nullptr; ++var) {
+        if (std::strncmp(*var, "LC_ALL=", 7) != 0) env.push_back(*var);
+    }
+    env.push_back(const_cast<char*>("LC_ALL=C"));
+    env.push_back(nullptr);
 
     int in_pipe[2];
     int out_pipe[2];
@@ -85,11 +115,10 @@ bool SudoJob::start(std::string& password,
         return false;
     }
     if (pid == 0) {
-        setenv("LC_ALL", "C", 1); // sudo messages in English: wrong_password() matches them
-        dup2(in_pipe[0], STDIN_FILENO);
-        dup2(out_pipe[1], STDOUT_FILENO);
-        dup2(out_pipe[1], STDERR_FILENO);
-        execv("/usr/bin/sudo", args.data());
+        if (move_fd(in_pipe[0], STDIN_FILENO) && move_fd(out_pipe[1], STDOUT_FILENO) &&
+            move_fd(out_pipe[1], STDERR_FILENO)) {
+            execve("/usr/bin/sudo", args.data(), env.data());
+        }
         _exit(127);
     }
 
@@ -112,7 +141,13 @@ bool SudoJob::start(std::string& password,
     wipe(password);
     close(in_pipe[1]);
 
-    fcntl(out_pipe[0], F_SETFL, fcntl(out_pipe[0], F_GETFL) | O_NONBLOCK);
+    const int flags = fcntl(out_pipe[0], F_GETFL);
+    if (flags < 0 || fcntl(out_pipe[0], F_SETFL, flags | O_NONBLOCK) != 0) {
+        // a blocking read would freeze the UI: give up on the output, keep the exit code
+        LV_LOG_WARN("sudo job: cannot make the output non-blocking");
+        close(out_pipe[0]);
+        out_pipe[0] = -1;
+    }
     fd_ = out_pipe[0];
     pid_ = pid;
     output_.clear();
@@ -124,7 +159,9 @@ void SudoJob::drain() {
     char buffer[512];
     ssize_t n = 0;
     while (fd_ >= 0 && (n = read(fd_, buffer, sizeof(buffer))) > 0) {
-        output_.append(buffer, static_cast<size_t>(n));
+        if (output_.size() < kMaxOutput) {
+            output_.append(buffer, std::min(static_cast<size_t>(n), kMaxOutput - output_.size()));
+        }
     }
 }
 
@@ -144,6 +181,9 @@ JobResult SudoJob::classify(int status) const {
     const int code = WEXITSTATUS(status);
     if (code != 0 && wrong_password(output_)) {
         return {JobOutcome::WrongPassword, code};
+    }
+    if (code != 0 && not_allowed(output_)) {
+        return {JobOutcome::NotAllowed, code};
     }
     switch (static_cast<ScriptExit>(code)) {
         case ScriptExit::Ok: return {JobOutcome::Success, code};
@@ -172,7 +212,7 @@ std::optional<JobResult> SudoJob::poll() {
     }
     pid_ = -1;
     if (done < 0) {
-        return JobResult{JobOutcome::Killed, -1}; // the child is gone (ECHILD): no status
+        return JobResult{JobOutcome::OtherError, -1}; // the child is gone (ECHILD): no status
     }
     return classify(status);
 }

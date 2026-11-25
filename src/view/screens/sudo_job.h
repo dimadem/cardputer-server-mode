@@ -18,6 +18,7 @@ namespace screen {
 enum class JobOutcome {
     Success,        // exit 0
     WrongPassword,  // sudo rejected the password, nothing ran
+    NotAllowed,     // sudo policy: this user may not run the script, nothing ran
     PartialFailure, // exit 1: some units failed, the state file keeps them
     BadArguments,   // exit 2
     Busy,           // exit 3: another switch holds the lock
@@ -28,7 +29,7 @@ enum class JobOutcome {
 
 struct JobResult {
     JobOutcome outcome;
-    int exit_code; // raw code for the log and the message; -1 when killed
+    int exit_code; // raw code for the log and the message; -1 when there is none
 };
 
 class SudoJob {
@@ -54,6 +55,7 @@ public:
 
 private:
     static bool wrong_password(const std::string& output);
+    static bool not_allowed(const std::string& output);
     JobResult classify(int status) const;
     void drain();
 

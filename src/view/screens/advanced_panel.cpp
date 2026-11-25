@@ -140,7 +140,7 @@ void AdvancedPanel::load_status() {
     }
     for (auto& item : items_) {
         if (item.kind == Kind::Gpu) {
-            item.gpu = settings::gpu_from_megabytes(status_->gpu_mb).value_or(item.gpu);
+            item.gpu = settings::gpu_from_megabytes(status_->gpu_mb);
         }
         else if (item.kind == Kind::Flag) {
             item.value = status_->flag(item.flag);
@@ -164,7 +164,7 @@ bool AdvancedPanel::boot_groups_outdated() const {
 bool AdvancedPanel::item_changed(const Item& item) const {
     if (!status_) return false; // unknown device state: nothing to compare with
     switch (item.kind) {
-        case Kind::Gpu: return settings::megabytes(item.gpu) != status_->gpu_mb;
+        case Kind::Gpu: return item.gpu && settings::megabytes(*item.gpu) != status_->gpu_mb;
         case Kind::Flag:
             if (status_->flag(item.flag) != item.value) return true;
             return item.flag == settings::BootFlag::BootServer && item.value &&
@@ -187,8 +187,8 @@ std::vector<std::string> AdvancedPanel::changed_args() const {
     std::vector<std::string> args;
     for (const auto& item : items_) {
         if (!item_changed(item)) continue;
-        if (item.kind == Kind::Gpu) {
-            args.push_back("gpu=" + std::to_string(settings::megabytes(item.gpu)));
+        if (item.kind == Kind::Gpu && item.gpu) {
+            args.push_back("gpu=" + std::to_string(settings::megabytes(*item.gpu)));
         }
         else if (item.kind == Kind::Flag) {
             args.push_back(std::string(settings::flag_key(item.flag)) + "=" +
@@ -199,6 +199,12 @@ std::vector<std::string> AdvancedPanel::changed_args() const {
         }
     }
     return args;
+}
+
+bool AdvancedPanel::boot_server_chosen() const {
+    return std::any_of(items_.begin(), items_.end(), [](const Item& item) {
+        return item.kind == Kind::Flag && item.flag == settings::BootFlag::BootServer && item.value;
+    });
 }
 
 // ---- rendering
@@ -218,10 +224,14 @@ void AdvancedPanel::render_item(size_t index) {
             active = item.value;
             value = item.value ? "yes" : "no";
             break;
-        case Kind::Gpu:
+        case Kind::Gpu: {
+            // nullopt: show the value from config.txt as it is
+            const int mb =
+                item.gpu ? settings::megabytes(*item.gpu) : (status_ ? status_->gpu_mb : 0);
             active = item.gpu != settings::GpuMemory::Mb128;
-            value = "< " + std::to_string(settings::megabytes(item.gpu)) + " MB >";
+            value = mb > 0 ? "< " + std::to_string(mb) + " MB >" : "?";
             break;
+        }
     }
     const bool changed = item_changed(item);
     const bool indented =
@@ -275,15 +285,15 @@ void AdvancedPanel::move_selection(int delta) {
 
 // ---- editing
 
-void AdvancedPanel::save_groups() {
-    if (settings::save_enabled_groups(enabled_groups())) {
-        set_message(boot_groups_outdated() ? "Saved. For boot: Enter (reboot)"
-                                           : "Saved: applies on next server mode switch",
-                    Tone::Success);
-    }
-    else {
+bool AdvancedPanel::save_groups() {
+    if (!settings::save_enabled_groups(enabled_groups())) {
         set_message("Failed to save settings", Tone::Error);
+        return false;
     }
+    set_message(boot_groups_outdated() ? "Saved. For boot: Enter (reboot)"
+                                       : "Saved: applies on next server mode switch",
+                Tone::Success);
+    return true;
 }
 
 void AdvancedPanel::change_value(int delta) {
@@ -291,13 +301,25 @@ void AdvancedPanel::change_value(int delta) {
     switch (item.kind) {
         case Kind::Group:
             item.value = !item.value;
-            save_groups();
+            if (!save_groups()) item.value = !item.value; // the screen keeps showing the file
             render_all(); // the "boot into server" row may become outdated
             return;
+        case Kind::Flag:
+        case Kind::Gpu:
+            if (!status_) {
+                set_message("Boot status unavailable", Tone::Error);
+                return;
+            }
+            break;
+        case Kind::Header:
+        case Kind::Reset: return;
+    }
+    switch (item.kind) {
         case Kind::Flag: item.value = !item.value; break;
         case Kind::Gpu: {
             const auto& choices = settings::kGpuChoices;
-            const auto it = std::find(choices.begin(), choices.end(), item.gpu);
+            const auto it =
+                item.gpu ? std::find(choices.begin(), choices.end(), *item.gpu) : choices.end();
             const auto count = static_cast<std::ptrdiff_t>(choices.size());
             const auto index = it == choices.end() ? 0 : std::distance(choices.begin(), it);
             // wraps: 128 -> 64 -> 32 -> 16 -> 128
@@ -305,6 +327,7 @@ void AdvancedPanel::change_value(int delta) {
             break;
         }
         case Kind::Header:
+        case Kind::Group:
         case Kind::Reset: return;
     }
     render_item(selected_);
@@ -363,11 +386,15 @@ void AdvancedPanel::on_key(uint32_t key) {
         case LV_KEY_LEFT: change_value(-1); break;
         case LV_KEY_RIGHT: change_value(1); break;
         case LV_KEY_ENTER:
-            if (!status_) {
+            // reset does not need the status: it puts back the backups and the defaults
+            if (items_[selected_].kind == Kind::Reset) {
+                ask_password(Prompt::Reset);
+            }
+            else if (!status_) {
                 set_message("Boot status unavailable", Tone::Error);
             }
-            else if (items_[selected_].kind == Kind::Reset) {
-                ask_password(Prompt::Reset);
+            else if (boot_server_chosen() && has_boot_changes() && enabled_groups().empty()) {
+                set_message("Boot into server mode: select a group", Tone::Warning);
             }
             else if (has_boot_changes()) {
                 ask_password(Prompt::Apply);
@@ -479,6 +506,11 @@ void AdvancedPanel::finish_job(const JobResult& result) {
         case JobOutcome::WrongPassword:
             // nothing was changed: keep the user's choices and the prompt
             set_message("Wrong password · Tab cancel", Tone::Error);
+            return;
+        case JobOutcome::NotAllowed:
+            prompt_ = Prompt::None;
+            update_password_label();
+            set_message("sudo: not allowed for this user", Tone::Error);
             return;
         case JobOutcome::Busy:
         case JobOutcome::PartialFailure:

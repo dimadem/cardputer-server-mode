@@ -1,21 +1,26 @@
 {
-  "app_name": "Template",
-  "package_name": "template_app",
-  "version": "0.2.1",
-  "description": "Template Application for CardputerZero",
-
+  "app_name": "Server Mode",
+  "package_name": "servermode",
+  "bin_name": "cz_server_mode",
+  "version": "0.1.0",
+  "description": "Switch CardputerZero between the desktop and a lean server mode",
   "store": {
-    "summary": "TODO: one line about your app (placeholders are auto-rejected)",
-    "description": "TODO: a longer description for the store detail page. Every TODO field in this store section must be replaced before publishing — the store validator rejects unedited template metadata.",
-    "categories": ["TODO: pick 1-2 real categories from docs/APP_BUILDER_JSON.md"],
+    "summary": "Stop the desktop and extra services to free RAM, and start them again with one key",
+    "description": "Server Mode stops the Raspberry Pi desktop and services that a headless board does not need (printing, PackageKit, portals, accounts, NFS) and keeps the CardputerZero screen, Wi-Fi, ssh and Bluetooth. Press Enter again to start the desktop. The Settings page selects the groups to stop and changes boot options (GPU memory, HDMI, camera, cloud-init, boot into server mode). Every change is reversible.",
+    "categories": [
+      "System Tools"
+    ],
     "screenshots": [
-      "screenshot/app-simulator-dark-darwin.png",
-      "screenshot/app-simulator-light-darwin.png"
+      "TODO: screenshot/main.png (320x170, Fn+J on the device)",
+      "TODO: screenshot/settings.png"
     ],
     "icon": "assets/images/cz_server_mode.png",
-    "license": "TODO: an SPDX id, e.g. MIT",
-    "source_repo": "https://github.com/CardputerZero/Template",
-    "author": { "github": "TODO-your-github-login", "display_name": "TODO: Your Name" },
+    "license": "MIT",
+    "source_repo": "https://github.com/dimadem/cardputer-server-mode",
+    "author": {
+      "github": "dimadem",
+      "display_name": "dimadem"
+    },
     "share_code": "TODO",
     "permissions": {
       "camera": false,
@@ -23,8 +28,8 @@
       "imu": false,
       "network": false,
       "additional_hardware": false,
-      "background_service": false,
-      "external_display": false
+      "background_service": true,
+      "external_display": true
     }
   }
 }

@@ -437,7 +437,7 @@ void DesktopVirtualKeypad::handle_key(uint8_t key_index) {
                 output_name = "page-down";
             }
         }
-        LOG_INFO("desktop keypad: input={} mode={} fn={} ctrl={} alt={} -> {} ({})",
+        LOG_DEBUG("desktop keypad: input={} mode={} fn={} ctrl={} alt={} -> {} ({})",
                  key_kind_name(key),
                  mode_name(),
                  fn_active_,

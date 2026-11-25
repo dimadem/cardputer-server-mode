@@ -22,7 +22,7 @@ The page names `Apple` and `Butter` come from the template. The app keeps these 
 | --- | --- |
 | `src/view/screens/server_panel.*` | The main page. It reads `/proc/meminfo`, finds the desktop process, reads the password and starts the switch. The page keeps the PID of labwc and reads all of `/proc` a maximum of one time in 10 seconds. |
 | `src/view/screens/advanced_panel.*` | The Settings page. It has the list of rows (`Kind::Header/Group/Flag/Gpu/Reset`), reads `advanced.sh status`, finds the changed items and shows the password prompt (`Prompt::None/Apply/Reset`). |
-| `src/view/screens/server_settings.*` | The list of service groups (`stop_groups()`), the file `~/.config/cz-server-mode/stop-groups` and the path of the scripts. |
+| `src/view/screens/server_settings.*` | The list of service groups (`kStopGroups`), the file `~/.config/cz-server-mode/stop-groups` and the path of the scripts. |
 | `src/view/screens/sudo_job.*` | Starts `sudo -S -k` in a child process and reads its output without a block. |
 | `src/view/screens/panel_common.h` | Shared helpers: status colors (`Tone`), labels and password edit. |
 | `src/view/widgets/help_popup.cpp` | The Fn+H help for the two pages. |
@@ -41,13 +41,13 @@ The code uses `enum class` types and structures for all states and values. It do
 | `settings::GpuMemory` | `Mb128`, `Mb64`, `Mb32`, `Mb16` | `server_settings.h` |
 | `settings::BootFlag` | `BootServer`, `CameraOff`, `HdmiOff`, `CloudInitOff` | `server_settings.h` |
 | `settings::BootStatus` | The parsed output of `advanced.sh status` | `server_settings.h` |
-| `screen::JobOutcome` | `Success`, `WrongPassword`, `PartialFailure`, `BadArguments`, `Busy`, `NotFound`, `Killed`, `OtherError` | `sudo_job.h` |
+| `screen::JobOutcome` | `Success`, `WrongPassword`, `NotAllowed`, `PartialFailure`, `BadArguments`, `Busy`, `NotFound`, `Killed`, `OtherError` | `sudo_job.h` |
 | `ServerPanel::Mode` | `Normal`, `Server` | `server_panel.h` |
 | `AdvancedPanel::Kind` | `Header`, `Group`, `Gpu`, `Flag`, `Reset` | `advanced_panel.h` |
 | `AdvancedPanel::Prompt` | `None`, `Apply`, `Reset` | `advanced_panel.h` |
 | `screen::Tone` | `Normal`, `Info`, `Success`, `Warning`, `Error` | `panel_common.h` |
 
-Only two locations convert these types to text. `server_settings.cpp` converts the values to the script arguments and parses the script output. `SudoJob::classify` converts the exit code of a script to a `JobOutcome`.
+`server_settings.cpp` converts the values to the script arguments and parses the script output. `SudoJob::classify` converts the exit code of a script and the sudo output to a `JobOutcome`. The panels convert the values to the text on the screen.
 
 Each `switch` statement on these types has a case for each value. If a case is not there, the `-Wswitch-enum` warning shows it.
 
@@ -57,7 +57,7 @@ The LVGL callbacks use `void* user_data`, because LVGL is a C library. Each call
 
 The `linux_input` module reads `/dev/input/event*`. It changes evdev codes into characters and arrows, and it uses the Shift state.
 
-Each screen sets a key handler with `set_screen_key_handler`. This handler gets each key before the navigation of the template. Thus, the password goes directly to the panel. On the Settings page, normal keys go only to the password prompt.
+Each screen sets a key handler with `set_screen_key_handler`. This handler gets each key before the global keys of the template (for example, Fn+H). Thus, the password goes directly to the panel. On the Settings page, normal keys go only to the password prompt.
 
 For each key release, the module sends the key that it sent for the key press (`pressed_keys`). Thus, a change of Shift or Fn between the press and the release does not leave a key in the pressed state.
 
