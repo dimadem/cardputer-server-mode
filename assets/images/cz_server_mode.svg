@@ -1,53 +1,85 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
   <title>Server Mode</title>
-  <!-- cute (anime style) server rack; the LEDs blink in viewers that play SMIL animation -->
+  <!-- cyberpunk server rack: neon outline, glitch shift, moving scan line, blinking LEDs (SMIL) -->
   <defs>
-    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#8F7BFF"/>
-      <stop offset="1" stop-color="#6A4DF0"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#140A2E"/>
+      <stop offset="1" stop-color="#05040F"/>
     </linearGradient>
+    <linearGradient id="case" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1B1640"/>
+      <stop offset="1" stop-color="#0C0A22"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="1.6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="tile"><rect x="2" y="2" width="96" height="96" rx="14"/></clipPath>
   </defs>
-  <!-- feet -->
-  <rect x="26" y="88" width="12" height="6" rx="2" fill="#3A2A9E"/>
-  <rect x="62" y="88" width="12" height="6" rx="2" fill="#3A2A9E"/>
-  <!-- case -->
-  <rect x="16" y="6" width="68" height="84" rx="12" fill="url(#body)" stroke="#3A2A9E" stroke-width="3"/>
-  <!-- face panel -->
-  <rect x="23" y="13" width="54" height="34" rx="8" fill="#231C4A"/>
-  <!-- eyes -->
-  <g transform-origin="50 29">
-    <ellipse cx="38" cy="29" rx="6" ry="7.5" fill="#FFFFFF"/>
-    <ellipse cx="62" cy="29" rx="6" ry="7.5" fill="#FFFFFF"/>
-    <ellipse cx="38.6" cy="30.2" rx="4" ry="5.4" fill="#2FD6C5"/>
-    <ellipse cx="61.4" cy="30.2" rx="4" ry="5.4" fill="#2FD6C5"/>
-    <ellipse cx="38.6" cy="31" rx="2.2" ry="3.2" fill="#0F1030"/>
-    <ellipse cx="61.4" cy="31" rx="2.2" ry="3.2" fill="#0F1030"/>
-    <circle cx="36.6" cy="27.3" r="1.8" fill="#FFFFFF"/>
-    <circle cx="59.4" cy="27.3" r="1.8" fill="#FFFFFF"/>
-    <circle cx="40.2" cy="33.2" r="0.9" fill="#FFFFFF"/>
-    <circle cx="63" cy="33.2" r="0.9" fill="#FFFFFF"/>
-    <!-- blink: the eyes close for a moment every 4 s -->
-    <animateTransform attributeName="transform" type="scale" additive="sum"
-      values="1 1;1 1;1 0.1;1 1" keyTimes="0;0.92;0.96;1" dur="4s" repeatCount="indefinite"/>
+
+  <g clip-path="url(#tile)">
+    <rect x="2" y="2" width="96" height="96" fill="url(#bg)"/>
+    <!-- floor grid -->
+    <g stroke="#FF2BD6" stroke-width="0.6" opacity="0.35">
+      <path d="M2 80 H98 M2 86 H98 M2 93 H98"/>
+      <path d="M50 76 L50 98 M38 76 L26 98 M62 76 L74 98 M26 76 L2 96 M74 76 L98 96"/>
+    </g>
+
+    <!-- glitch ghost of the case (magenta, shifted left) -->
+    <path d="M30 12 H76 L80 16 V74 L76 78 H24 L20 74 V22 Z" fill="none" stroke="#FF2BD6" stroke-width="2" opacity="0.7"
+      transform="translate(-3 2)">
+      <animateTransform attributeName="transform" type="translate"
+        values="-3 2;-3 2;-6 3;1 -1;-3 2" keyTimes="0;0.86;0.9;0.94;1" dur="3s" repeatCount="indefinite"/>
+    </path>
+
+    <!-- case with a cut corner -->
+    <path d="M30 12 H76 L80 16 V74 L76 78 H24 L20 74 V22 Z" fill="url(#case)" stroke="#00F0FF" stroke-width="2.2" filter="url(#glow)"/>
+    <path d="M22 21 L29 14" stroke="#00F0FF" stroke-width="1.2" opacity="0.7"/>
+
+    <!-- three rack units -->
+    <g fill="#07061A" stroke="#00F0FF" stroke-width="1" stroke-opacity="0.6">
+      <rect x="26" y="22" width="48" height="14" rx="1.5"/>
+      <rect x="26" y="40" width="48" height="14" rx="1.5"/>
+      <rect x="26" y="58" width="48" height="14" rx="1.5"/>
+    </g>
+    <!-- vents -->
+    <g stroke="#3A3A8C" stroke-width="1.6" stroke-linecap="round">
+      <path d="M30 29 H50 M30 47 H50 M30 65 H50"/>
+    </g>
+    <g stroke="#00F0FF" stroke-width="1.6" stroke-linecap="round" opacity="0.8">
+      <path d="M30 29 H38 M30 47 H44 M30 65 H34"/>
+    </g>
+
+    <!-- LEDs -->
+    <g filter="url(#glow)">
+      <circle cx="62" cy="29" r="2.4" fill="#FF2BD6">
+        <animate attributeName="opacity" values="1;0.2;1" dur="0.9s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="69" cy="29" r="2.4" fill="#00F0FF"/>
+      <circle cx="62" cy="47" r="2.4" fill="#00F0FF"/>
+      <circle cx="69" cy="47" r="2.4" fill="#F5FF3B">
+        <animate attributeName="opacity" values="1;1;0.15;1" keyTimes="0;0.5;0.6;1" dur="1.6s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="62" cy="65" r="2.4" fill="#FF2BD6">
+        <animate attributeName="opacity" values="0.2;1;0.2" dur="1.3s" begin="0.4s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="69" cy="65" r="2.4" fill="#00F0FF"/>
+    </g>
+
+    <!-- scan line moving down the case -->
+    <rect x="21" y="14" width="58" height="2" fill="#00F0FF" opacity="0.35">
+      <animate attributeName="y" values="14;74;14" dur="2.6s" repeatCount="indefinite"/>
+    </rect>
+
+    <!-- glitch bars -->
+    <rect x="58" y="36" width="26" height="2.4" fill="#FF2BD6" opacity="0">
+      <animate attributeName="opacity" values="0;0;0.9;0;0" keyTimes="0;0.86;0.9;0.94;1" dur="3s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="14" y="55" width="20" height="1.6" fill="#00F0FF" opacity="0">
+      <animate attributeName="opacity" values="0;0;0.9;0" keyTimes="0;0.9;0.93;1" dur="3s" repeatCount="indefinite"/>
+    </rect>
+
   </g>
-  <!-- blush and smile -->
-  <ellipse cx="29.5" cy="38.5" rx="3.6" ry="2" fill="#FF7AA8" opacity="0.85"/>
-  <ellipse cx="70.5" cy="38.5" rx="3.6" ry="2" fill="#FF7AA8" opacity="0.85"/>
-  <path d="M46 38.5 Q50 42.5 54 38.5" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round"/>
-  <!-- drive bays -->
-  <rect x="23" y="53" width="54" height="14" rx="4" fill="#231C4A"/>
-  <rect x="23" y="70" width="54" height="14" rx="4" fill="#231C4A"/>
-  <rect x="29" y="58.5" width="22" height="3" rx="1.5" fill="#5A4BB0"/>
-  <rect x="29" y="75.5" width="22" height="3" rx="1.5" fill="#5A4BB0"/>
-  <!-- LEDs -->
-  <circle cx="62" cy="60" r="3" fill="#3DFF8F">
-    <animate attributeName="opacity" values="1;0.25;1" dur="1.2s" repeatCount="indefinite"/>
-  </circle>
-  <circle cx="70.5" cy="60" r="3" fill="#FFC83D"/>
-  <circle cx="62" cy="77" r="3" fill="#3DFF8F"/>
-  <circle cx="70.5" cy="77" r="3" fill="#3DFF8F">
-    <animate attributeName="opacity" values="1;0.25;1" dur="0.8s" begin="0.4s" repeatCount="indefinite"/>
-  </circle>
-  <!-- sparkle -->
-  <path d="M88 10 L90 15 L95 17 L90 19 L88 24 L86 19 L81 17 L86 15 Z" fill="#FFE066"/>
+  <!-- tile frame -->
+  <rect x="2.5" y="2.5" width="95" height="95" rx="14" fill="none" stroke="#FF2BD6" stroke-width="1" opacity="0.6"/>
 </svg>
