@@ -17,7 +17,6 @@ BaseScreen::BaseScreen(viewmodel::BaseViewModel& view_model, app::AssetManager& 
 
 BaseScreen::~BaseScreen() {
     title_bar_.reset();
-    nav_bar_.reset();
 
     if (root_ && lv_obj_is_valid(root_)) {
         lv_obj_delete(root_);

@@ -33,8 +33,7 @@ namespace {
 #if !USE_DESKTOP
 constexpr const char* kNotoSansCjkRegular =
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc";
-constexpr const char* kNotoSansCjkBold =
-    "/usr/share/fonts/opentype/noto/NotoSansCJK-Medium.ttc";
+constexpr const char* kNotoSansCjkBold = "/usr/share/fonts/opentype/noto/NotoSansCJK-Medium.ttc";
 #endif
 
 bool path_exists(const std::filesystem::path& path) {
@@ -79,11 +78,11 @@ const lv_font_t* fallback_font(uint32_t size) {
 
 struct AssetManager::LoadedFont {
     std::filesystem::path path;
-    uint32_t size;
-    lv_font_t* font;
+    uint32_t size{0};
+    lv_font_t* font{nullptr};
 };
 
-AssetManager::AssetManager(std::string app_name, std::filesystem::path cmake_assets_root) {
+AssetManager::AssetManager(const std::string& app_name, std::filesystem::path cmake_assets_root) {
     add_root_if_valid(std::move(cmake_assets_root));
     add_root_if_valid(default_cmake_assets_root());
     add_root_if_valid(APP_SOURCE_ASSETS_ROOT);
@@ -128,21 +127,19 @@ std::filesystem::path AssetManager::resolve(const std::filesystem::path& relativ
     return {};
 }
 
-std::filesystem::path AssetManager::resolve_font(const std::filesystem::path& file_name) const {
-    return resolve(std::filesystem::path{"fonts"} / file_name);
-}
-
 lv_font_t* AssetManager::load_font(const std::filesystem::path& file_name, uint32_t size) {
 #if LV_USE_FREETYPE
-    auto path = resolve_font(file_name);
+    // an absolute file_name replaces "fonts" (std::filesystem::path::operator/)
+    auto path = resolve(std::filesystem::path{"fonts"} / file_name);
     if (path.empty()) {
         LOG_WARN("font asset not found: {}", file_name.string());
         return nullptr;
     }
 
-    auto existing = std::find_if(loaded_fonts_.begin(), loaded_fonts_.end(), [&](const auto& loaded_font) {
-        return loaded_font && loaded_font->path == path && loaded_font->size == size;
-    });
+    auto existing =
+        std::find_if(loaded_fonts_.begin(), loaded_fonts_.end(), [&](const auto& loaded_font) {
+            return loaded_font && loaded_font->path == path && loaded_font->size == size;
+        });
     if (existing != loaded_fonts_.end()) {
         return (*existing)->font;
     }
@@ -173,9 +170,8 @@ lv_font_t* AssetManager::load_standard_font(uint32_t size, StandardFontWeight we
     LV_UNUSED(weight);
     return nullptr;
 #else
-    const char* path = weight == StandardFontWeight::Regular
-                           ? kNotoSansCjkRegular
-                           : kNotoSansCjkBold;
+    const char* path =
+        weight == StandardFontWeight::Regular ? kNotoSansCjkRegular : kNotoSansCjkBold;
     auto* font = load_font(path, size);
     if (font) {
         font->fallback = fallback_font(size);

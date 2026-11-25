@@ -62,7 +62,7 @@ void quit_requested_observer(lv_observer_t* observer, lv_subject_t* subject) {
 
 struct DarkModePersistence {
     std::string config_path;
-    bool last_dark_mode;
+    bool last_dark_mode{false};
 };
 
 std::string writable_config_path() {
@@ -103,7 +103,8 @@ void persist_dark_mode_observer(lv_observer_t* observer, lv_subject_t* subject) 
         LOG_INFO("saved config: {} (dark_mode={})",
                  persistence->config_path,
                  config.dark_mode ? "yes" : "no");
-    } else {
+    }
+    else {
         LOG_WARN("failed to save config {}: {}", persistence->config_path, error);
     }
 }
@@ -113,12 +114,18 @@ public:
     ShortcutController(viewmodel::BaseViewModel& view_model, AssetManager& assets)
         : view_model_(view_model),
           toast_(std::make_unique<view::widgets::Toast>(lv_layer_top(), view_model, assets)),
-          help_popup_(std::make_unique<view::widgets::HelpPopup>(lv_layer_top(), view_model, assets)) {
+          help_popup_(
+              std::make_unique<view::widgets::HelpPopup>(lv_layer_top(), view_model, assets)) {
         toast_->build();
         help_popup_->build();
         platform::set_global_key_listener(global_key_listener, this);
         platform::set_key_release_listener(key_release_listener, this);
     }
+
+    ShortcutController(const ShortcutController&) = delete;
+    ShortcutController& operator=(const ShortcutController&) = delete;
+    ShortcutController(ShortcutController&&) = delete;
+    ShortcutController& operator=(ShortcutController&&) = delete;
 
     ~ShortcutController() {
         platform::clear_key_release_listener(key_release_listener, this);
@@ -204,18 +211,15 @@ private:
 
         if (exit_armed_) {
             toast_->hide();
-        } else if (key == LV_KEY_ESC &&
-                   view_model_.current_page() == model::AppPage::Butter) {
+        }
+        else if (key == LV_KEY_ESC && view_model_.current_page() == model::AppPage::Butter) {
             view_model_.show_apple_page();
         }
         exit_key_pressed_ = 0;
         exit_armed_ = false;
     }
 
-    static bool global_key_listener(uint32_t key,
-                                    const char*,
-                                    bool long_pressed,
-                                    void* user_data) {
+    static bool global_key_listener(uint32_t key, const char*, bool long_pressed, void* user_data) {
         auto* controller = static_cast<ShortcutController*>(user_data);
         return controller != nullptr && controller->handle_key(key, long_pressed);
     }
@@ -296,7 +300,8 @@ int Application::run() {
         LOG_INFO("loaded config: {} (dark_mode={})",
                  loaded_config_path,
                  config.dark_mode ? "yes" : "no");
-    } else {
+    }
+    else {
         LOG_WARN("failed to load config {}: {}; using defaults", loaded_config_path, config_error);
     }
 
@@ -311,7 +316,7 @@ int Application::run() {
         return 1;
     }
 
-    auto* standard_font = assets.load_standard_font(14);
+    const auto* standard_font = assets.load_standard_font(14);
     view::apply_lvgl_theme(display,
                            view_model.is_dark_mode(),
                            standard_font ? standard_font : LV_FONT_DEFAULT);
@@ -326,15 +331,16 @@ int Application::run() {
 
     DarkModePersistence dark_mode_persistence{user_config_path, view_model.is_dark_mode()};
     auto* dark_mode_observer = lv_subject_add_observer(view_model.dark_mode_subject(),
-                                                        persist_dark_mode_observer,
-                                                        &dark_mode_persistence);
+                                                       persist_dark_mode_observer,
+                                                       &dark_mode_persistence);
 
     bool running = true;
     auto* quit_observer = lv_subject_add_observer(view_model.quit_requested_subject(),
                                                   quit_requested_observer,
                                                   &running);
 
-    LOG_INFO("LVGL app started at {}x{}", lv_display_get_horizontal_resolution(display),
+    LOG_INFO("LVGL app started at {}x{}",
+             lv_display_get_horizontal_resolution(display),
              lv_display_get_vertical_resolution(display));
     while (running
 #if USE_DESKTOP

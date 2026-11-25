@@ -16,9 +16,7 @@ namespace app {
 namespace {
 
 std::string trim(std::string value) {
-    const auto is_not_space = [](unsigned char character) {
-        return !std::isspace(character);
-    };
+    const auto is_not_space = [](unsigned char character) { return !std::isspace(character); };
 
     value.erase(value.begin(), std::find_if(value.begin(), value.end(), is_not_space));
     value.erase(std::find_if(value.rbegin(), value.rend(), is_not_space).base(), value.end());
@@ -53,8 +51,7 @@ bool is_section(const std::string& line, const std::string& expected) {
 
 bool is_key(const std::string& line, const std::string& expected) {
     const auto separator = line.find('=');
-    return separator != std::string::npos &&
-           lowercase(trim(line.substr(0, separator))) == expected;
+    return separator != std::string::npos && lowercase(trim(line.substr(0, separator))) == expected;
 }
 
 } // namespace
@@ -90,11 +87,10 @@ bool load_application_config(const std::string& path,
         }
 
         const auto key = lowercase(trim(line.substr(0, separator)));
-        if (section == "application" && key == "dark_mode") {
-            if (!parse_bool(line.substr(separator + 1), config.dark_mode)) {
-                error = "invalid dark_mode value at line " + std::to_string(line_number);
-                return false;
-            }
+        if (section == "application" && key == "dark_mode" &&
+            !parse_bool(line.substr(separator + 1), config.dark_mode)) {
+            error = "invalid dark_mode value at line " + std::to_string(line_number);
+            return false;
         }
     }
 
@@ -132,8 +128,8 @@ bool save_application_config(const std::string& path,
 
     for (const auto& current_line : lines) {
         const auto normalized = trim(current_line);
-        const bool section_header = normalized.size() >= 2 && normalized.front() == '[' &&
-                                    normalized.back() == ']';
+        const bool section_header =
+            normalized.size() >= 2 && normalized.front() == '[' && normalized.back() == ']';
         if (section_header) {
             if (in_application_section && !wrote_dark_mode) {
                 updated.push_back(dark_mode_line);

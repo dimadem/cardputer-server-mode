@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: MIT
  */
 
+// reactive:: wraps the LVGL subject API as a whole; not every accessor is used here.
+// tools/check.sh suppresses unusedFunction for it (-j).
+// cppcheck-suppress-file unusedFunction
+
 #pragma once
 
 #include "lvgl.h"
@@ -41,9 +45,9 @@ public:
 
     int32_t value() const;
     int32_t previous() const;
-    void set(int32_t value);
-    void set_min(int32_t value);
-    void set_max(int32_t value);
+    void set(int32_t new_value);
+    void set_min(int32_t new_value);
+    void set_max(int32_t new_value);
 };
 
 class BoolSubject final : public Subject {
@@ -52,7 +56,7 @@ public:
 
     bool value() const;
     bool previous() const;
-    void set(bool value);
+    void set(bool new_value);
     void toggle();
 };
 
@@ -63,9 +67,9 @@ public:
 
     float value() const;
     float previous() const;
-    void set(float value);
-    void set_min(float value);
-    void set_max(float value);
+    void set(float new_value);
+    void set_min(float new_value);
+    void set_max(float new_value);
 };
 #endif
 
@@ -77,22 +81,16 @@ public:
         initialized_ = true;
     }
 
-    const char* value() const {
-        return lv_subject_get_string(native_mutable());
-    }
+    const char* value() const { return lv_subject_get_string(native_mutable()); }
 
-    const char* previous() const {
-        return lv_subject_get_previous_string(native_mutable());
-    }
+    const char* previous() const { return lv_subject_get_previous_string(native_mutable()); }
 
-    void set(const char* value) {
-        lv_subject_copy_string(native(), value ? value : "");
+    void set(const char* new_value) {
+        lv_subject_copy_string(native(), new_value ? new_value : "");
     }
 
 private:
-    lv_subject_t* native_mutable() const {
-        return const_cast<lv_subject_t*>(&subject_);
-    }
+    lv_subject_t* native_mutable() const { return const_cast<lv_subject_t*>(&subject_); }
 
     static_assert(Size > 0, "StringSubject requires storage for the null terminator");
 
@@ -109,21 +107,18 @@ public:
     }
 
     T* value() const {
-        return static_cast<T*>(const_cast<void*>(lv_subject_get_pointer(native_mutable())));
+        return const_cast<T*>(static_cast<const T*>(lv_subject_get_pointer(native_mutable())));
     }
 
     T* previous() const {
-        return static_cast<T*>(const_cast<void*>(lv_subject_get_previous_pointer(native_mutable())));
+        return const_cast<T*>(
+            static_cast<const T*>(lv_subject_get_previous_pointer(native_mutable())));
     }
 
-    void set(T* value) {
-        lv_subject_set_pointer(native(), value);
-    }
+    void set(T* new_value) { lv_subject_set_pointer(native(), new_value); }
 
 private:
-    lv_subject_t* native_mutable() const {
-        return const_cast<lv_subject_t*>(&subject_);
-    }
+    lv_subject_t* native_mutable() const { return const_cast<lv_subject_t*>(&subject_); }
 };
 
 class ColorSubject final : public Subject {
@@ -132,14 +127,14 @@ public:
 
     lv_color_t value() const;
     lv_color_t previous() const;
-    void set(lv_color_t value);
+    void set(lv_color_t new_value);
 };
 
 template <std::size_t Size>
 class GroupSubject final : public Subject {
 public:
     explicit GroupSubject(const std::array<Subject*, Size>& subjects) {
-        for(std::size_t i = 0; i < Size; ++i) {
+        for (std::size_t i = 0; i < Size; ++i) {
             subjects_[i] = subjects[i] ? subjects[i]->native() : nullptr;
         }
         lv_subject_init_group(&subject_, subjects_.data(), Size);

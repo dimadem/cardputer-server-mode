@@ -18,7 +18,7 @@ namespace view::widgets {
 Toast::Toast(lv_obj_t* parent,
              viewmodel::BaseViewModel& view_model,
              app::AssetManager& assets,
-             ToastConfig config)
+             const ToastConfig& config)
     : BaseWidgets(parent), view_model_(view_model), assets_(assets), config_(config) {}
 
 Toast::~Toast() {
@@ -113,7 +113,7 @@ void Toast::show_current_message(uint32_t duration_ms, bool persistent) {
     if (persistent) {
         return;
     }
-    const uint32_t timeout = duration_ms ? duration_ms : config_.duration_ms;
+    const uint32_t timeout = duration_ms != 0 ? duration_ms : config_.duration_ms;
     if (timeout == 0) {
         return;
     }
@@ -128,22 +128,6 @@ void Toast::show_current_message(uint32_t duration_ms, bool persistent) {
     lv_timer_set_repeat_count(hide_timer_, 1);
     lv_timer_resume(hide_timer_);
     lv_timer_reset(hide_timer_);
-}
-
-void Toast::show_persistent(const std::string& message, ToastTone tone) {
-    if (!core_obj_) {
-        build();
-    }
-    if (!core_obj_ || !label_) {
-        return;
-    }
-
-    prefix_ = message;
-    highlighted_.clear();
-    suffix_.clear();
-    tone_ = tone;
-    scroll_ = false;
-    show_current_message(0, true);
 }
 
 void Toast::show_persistent_highlighted(const std::string& prefix,
@@ -175,7 +159,7 @@ void Toast::hide() {
 }
 
 bool Toast::visible() const {
-    return core_obj_ && lv_obj_is_valid(core_obj_) &&
+    return core_obj_ != nullptr && lv_obj_is_valid(core_obj_) &&
            !lv_obj_has_flag(core_obj_, LV_OBJ_FLAG_HIDDEN);
 }
 
@@ -204,9 +188,8 @@ void Toast::update_label_text() {
     std::snprintf(color_hex,
                   sizeof(color_hex),
                   "%06x",
-                  static_cast<unsigned int>(lv_color_to_int(highlight_color) & 0xffffffU));
-    const std::string text =
-        prefix_ + "#" + color_hex + " " + highlighted_ + "#" + suffix_;
+                  lv_color_to_int(highlight_color) & 0xffffffU);
+    const std::string text = prefix_ + "#" + color_hex + " " + highlighted_ + "#" + suffix_;
     lv_label_set_text(label_, text.c_str());
 }
 
@@ -225,21 +208,18 @@ void Toast::update_size() {
                      content_max_width,
                      LV_TEXT_FLAG_NONE);
 
-    const int32_t label_width = scroll_
-                                    ? content_max_width
-                                    : std::clamp<int32_t>(text_size.x, 1, content_max_width);
-    const int32_t toast_width = std::clamp<int32_t>(
-        label_width + config_.horizontal_padding * 2,
-        config_.min_width,
-        max_width);
+    const int32_t label_width =
+        scroll_ ? content_max_width : std::clamp<int32_t>(text_size.x, 1, content_max_width);
+    const int32_t toast_width = std::clamp<int32_t>(label_width + config_.horizontal_padding * 2,
+                                                    config_.min_width,
+                                                    max_width);
     const int32_t text_height = scroll_ ? lv_font_get_line_height(font_) : text_size.y;
     const int32_t toast_height =
         std::max<int32_t>(config_.min_height, text_height + config_.vertical_padding * 2);
 
     lv_obj_set_width(label_, label_width);
     lv_obj_set_height(label_, LV_SIZE_CONTENT);
-    lv_label_set_long_mode(label_,
-                           scroll_ ? LV_LABEL_LONG_SCROLL_CIRCULAR : LV_LABEL_LONG_WRAP);
+    lv_label_set_long_mode(label_, scroll_ ? LV_LABEL_LONG_SCROLL_CIRCULAR : LV_LABEL_LONG_WRAP);
     lv_obj_set_style_anim_duration(label_, scroll_ ? lv_anim_speed(22) : 0, 0);
     lv_obj_set_size(core_obj_, toast_width, toast_height);
     lv_obj_align(core_obj_, LV_ALIGN_BOTTOM_MID, 0, -config_.bottom_offset);

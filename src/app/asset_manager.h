@@ -23,7 +23,7 @@ enum class StandardFontWeight {
 
 class AssetManager {
 public:
-    explicit AssetManager(std::string app_name = default_app_name(),
+    explicit AssetManager(const std::string& app_name = default_app_name(),
                           std::filesystem::path cmake_assets_root = default_cmake_assets_root());
     ~AssetManager();
 
@@ -35,7 +35,6 @@ public:
 
     const std::vector<std::filesystem::path>& roots() const;
     std::filesystem::path resolve(const std::filesystem::path& relative_path) const;
-    std::filesystem::path resolve_font(const std::filesystem::path& file_name) const;
 
     lv_font_t* load_font(const std::filesystem::path& file_name, uint32_t size);
     lv_font_t* load_standard_font(uint32_t size,

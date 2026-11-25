@@ -152,7 +152,7 @@ void HelpPopup::hide() {
 }
 
 bool HelpPopup::visible() const {
-    return core_obj_ && lv_obj_is_valid(core_obj_) &&
+    return core_obj_ != nullptr && lv_obj_is_valid(core_obj_) &&
            !lv_obj_has_flag(core_obj_, LV_OBJ_FLAG_HIDDEN);
 }
 

@@ -1,23 +1,11 @@
 THIRD-PARTY FONT & ICON LICENSES
 ================================
 
-This directory contains fonts and icon assets under multiple licenses.
+This directory contains icon font assets.
 Each asset is governed by its own license terms.
 
 ------------------------------------------------------------
-1. Kenney - Input Prompts
-------------------------------------------------------------
-
-Created/distributed by Kenney (www.kenney.nl)
-
-License: Creative Commons Zero (CC0 1.0)
-http://creativecommons.org/publicdomain/zero/1.0/
-
-This asset is dedicated to the public domain.
-You may use it for any purpose, including commercial use.
-
-------------------------------------------------------------
-2. Phosphor Icons
+1. Phosphor Icons
 ------------------------------------------------------------
 
 Copyright (c) 2020 Phosphor Icons

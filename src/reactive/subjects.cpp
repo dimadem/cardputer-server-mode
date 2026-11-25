@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: MIT
  */
 
+// See subjects.h: the wrapper API is kept whole.
+// cppcheck-suppress-file unusedFunction
+
 #include "subjects.h"
 
 namespace reactive {
@@ -29,7 +32,7 @@ void Subject::notify() {
 }
 
 void Subject::deinit() {
-    if(initialized_) {
+    if (initialized_) {
         lv_subject_deinit(&subject_);
         initialized_ = false;
     }
@@ -48,16 +51,16 @@ int32_t IntSubject::previous() const {
     return lv_subject_get_previous_int(const_cast<lv_subject_t*>(&subject_));
 }
 
-void IntSubject::set(int32_t value) {
-    lv_subject_set_int(native(), value);
+void IntSubject::set(int32_t new_value) {
+    lv_subject_set_int(native(), new_value);
 }
 
-void IntSubject::set_min(int32_t value) {
-    lv_subject_set_min_value_int(native(), value);
+void IntSubject::set_min(int32_t new_value) {
+    lv_subject_set_min_value_int(native(), new_value);
 }
 
-void IntSubject::set_max(int32_t value) {
-    lv_subject_set_max_value_int(native(), value);
+void IntSubject::set_max(int32_t new_value) {
+    lv_subject_set_max_value_int(native(), new_value);
 }
 
 BoolSubject::BoolSubject(bool value) {
@@ -73,8 +76,8 @@ bool BoolSubject::previous() const {
     return lv_subject_get_previous_int(const_cast<lv_subject_t*>(&subject_)) != 0;
 }
 
-void BoolSubject::set(bool value) {
-    lv_subject_set_int(native(), value ? 1 : 0);
+void BoolSubject::set(bool new_value) {
+    lv_subject_set_int(native(), new_value ? 1 : 0);
 }
 
 void BoolSubject::toggle() {
@@ -95,16 +98,16 @@ float FloatSubject::previous() const {
     return lv_subject_get_previous_float(const_cast<lv_subject_t*>(&subject_));
 }
 
-void FloatSubject::set(float value) {
-    lv_subject_set_float(native(), value);
+void FloatSubject::set(float new_value) {
+    lv_subject_set_float(native(), new_value);
 }
 
-void FloatSubject::set_min(float value) {
-    lv_subject_set_min_value_float(native(), value);
+void FloatSubject::set_min(float new_value) {
+    lv_subject_set_min_value_float(native(), new_value);
 }
 
-void FloatSubject::set_max(float value) {
-    lv_subject_set_max_value_float(native(), value);
+void FloatSubject::set_max(float new_value) {
+    lv_subject_set_max_value_float(native(), new_value);
 }
 #endif
 
@@ -121,8 +124,8 @@ lv_color_t ColorSubject::previous() const {
     return lv_subject_get_previous_color(const_cast<lv_subject_t*>(&subject_));
 }
 
-void ColorSubject::set(lv_color_t value) {
-    lv_subject_set_color(native(), value);
+void ColorSubject::set(lv_color_t new_value) {
+    lv_subject_set_color(native(), new_value);
 }
 
 } // namespace reactive

@@ -8,12 +8,8 @@
 
 namespace model {
 
-const char* BaseModel::app_title() const {
+const char* BaseModel::app_title() {
     return "Server Mode";
-}
-
-const char* BaseModel::greeting() const {
-    return "Hello World";
 }
 
 bool BaseModel::dark_mode() const {
@@ -24,21 +20,12 @@ void BaseModel::set_dark_mode(bool enabled) {
     dark_mode_ = enabled;
 }
 
-void BaseModel::toggle_dark_mode() {
-    dark_mode_ = !dark_mode_;
-}
-
 AppPage BaseModel::current_page() const {
     return current_page_;
 }
 
-
 void BaseModel::set_current_page(AppPage page) {
     current_page_ = page;
-}
-
-void BaseModel::toggle_page() {
-    current_page_ = current_page_ == AppPage::Apple ? AppPage::Butter : AppPage::Apple;
 }
 
 } // namespace model

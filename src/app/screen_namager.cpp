@@ -90,10 +90,6 @@ void ScreenManager::flush_requested_page() {
     show_apple_screen();
 }
 
-lv_obj_t* ScreenManager::current_screen() const {
-    return current_screen_ ? current_screen_->root() : nullptr;
-}
-
 void ScreenManager::load_screen(std::unique_ptr<screen::BaseScreen> next_screen) {
     if (!next_screen || !next_screen->root()) {
         return;

@@ -28,7 +28,6 @@ public:
     void show_butter_screen();
     void request_page(model::AppPage page);
     void flush_requested_page();
-    lv_obj_t* current_screen() const;
 
 private:
     void load_screen(std::unique_ptr<screen::BaseScreen> next_screen);

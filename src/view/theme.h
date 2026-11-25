@@ -10,10 +10,9 @@
 
 namespace view {
 
-constexpr int kScreenWidth    = 320;
-constexpr int kScreenHeight   = 170;
+constexpr int kScreenWidth = 320;
+constexpr int kScreenHeight = 170;
 constexpr int kTitleBarHeight = 30;
-constexpr int kNavBarHeight   = 30;
 
 struct ThemePalette {
     lv_color_t background;
@@ -31,6 +30,8 @@ struct ThemePalette {
 };
 
 ThemePalette palette(bool dark_mode);
-void apply_lvgl_theme(lv_display_t* display, bool dark_mode, const lv_font_t* font = LV_FONT_DEFAULT);
+void apply_lvgl_theme(lv_display_t* display,
+                      bool dark_mode,
+                      const lv_font_t* font = LV_FONT_DEFAULT);
 
 } // namespace view

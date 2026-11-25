@@ -3,75 +3,79 @@
  *
  * SPDX-License-Identifier: MIT
  */
- 
+
+// See logger.h: the Logger API is kept whole.
+// cppcheck-suppress-file unusedFunction
+
 #include "logger.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <initializer_list>
 #ifdef _WIN32
-#  include <io.h>
-#  include <process.h>
+#include <io.h>
+#include <process.h>
 #else
-#  include <unistd.h>
+#include <unistd.h>
 #endif
 
-
 #ifdef _WIN32
-#  ifndef STDOUT_FILENO
-#    define STDOUT_FILENO 1
-#  endif
+#ifndef STDOUT_FILENO
+#define STDOUT_FILENO 1
+#endif
 
-#  ifndef isatty
-#    define isatty _isatty
-#  endif
+#ifndef isatty
+#define isatty _isatty
+#endif
 #endif
 
 namespace logger {
 
-constexpr const char* RESET   = "\033[0m";
-constexpr const char* GRAY    = "\033[90m";
-constexpr const char* CYAN    = "\033[36m";
-constexpr const char* GREEN   = "\033[32m";
-constexpr const char* YELLOW  = "\033[33m";
-constexpr const char* RED     = "\033[31m";
+constexpr const char* RESET = "\033[0m";
+constexpr const char* GRAY = "\033[90m";
+constexpr const char* CYAN = "\033[36m";
+constexpr const char* GREEN = "\033[32m";
+constexpr const char* YELLOW = "\033[33m";
+constexpr const char* RED = "\033[31m";
 constexpr const char* MAGENTA = "\033[35m";
 
 const char* level_to_color(LogLevel level) {
-    switch (level){
+    switch (level) {
         case LogLevel::TRACE: return GRAY;
         case LogLevel::DEBUG: return CYAN;
-        case LogLevel::INFO : return GREEN;
-        case LogLevel::WARN : return YELLOW;
+        case LogLevel::INFO: return GREEN;
+        case LogLevel::WARN: return YELLOW;
         case LogLevel::ERROR: return RED;
         case LogLevel::FATAL: return MAGENTA;
-        default             : return RESET;
+        case LogLevel::OFF: break;
     }
+    return RESET;
 }
 
 const char* level_to_string(LogLevel level) {
     switch (level) {
         case LogLevel::TRACE: return "T";
         case LogLevel::DEBUG: return "D";
-        case LogLevel::INFO : return "I";
-        case LogLevel::WARN : return "W";
+        case LogLevel::INFO: return "I";
+        case LogLevel::WARN: return "W";
         case LogLevel::ERROR: return "E";
         case LogLevel::FATAL: return "F";
-        default             : return "?";
+        case LogLevel::OFF: break;
     }
+    return "?";
 }
 
 bool term_supports_color() {
     const char* term = getenv("TERM");
     if (!term) return false;
 
-    return
-        strstr(term, "xterm") ||
-        strstr(term, "color") ||
-        strstr(term, "ansi")  ||
-        strstr(term, "screen")||
-        strstr(term, "tmux")  ||
-        strstr(term, "rxvt");
+    for (const char* name : {"xterm", "color", "ansi", "screen", "tmux", "rxvt"}) {
+        if (strstr(term, name) != nullptr) {
+            return true;
+        }
+    }
+    return false;
 }
 
 const char* base_name(const char* path) {
@@ -97,8 +101,8 @@ std::string current_timestamp() {
     localtime_r(&now, &tm_now);
 #endif
 
-
-    char buffer[32];
+    // sized for any int values, so the output can never be truncated
+    char buffer[72];
     std::snprintf(buffer,
                   sizeof(buffer),
                   "%d-%d-%d %02d:%02d:%02d",
@@ -135,19 +139,18 @@ std::string make_prefix(LogLevel level,
     return prefix;
 }
 
-void Logger::init(){
-}
+void Logger::init() {}
 
-void Logger::set_level(LogLevel level) {
-    level_ = level;
+void Logger::set_level(LogLevel new_level) {
+    level_ = new_level;
 }
 
 LogLevel Logger::level() {
     return level_;
 }
 
-void Logger::set_tag(const char* tag) {
-    tag_ = tag ? tag : "";
+void Logger::set_tag(const char* new_tag) {
+    tag_ = new_tag ? new_tag : "";
 }
 
 const char* Logger::tag() {
@@ -167,43 +170,34 @@ bool Logger::timestamp_enabled() {
 }
 
 // conditional log
-bool Logger::should_log(LogLevel level) {
-    return level >= level_ && level_ != LogLevel::OFF;
+bool Logger::should_log(LogLevel message_level) {
+    return message_level >= level_ && level_ != LogLevel::OFF;
 }
 
 bool Logger::should_use_color() {
     switch (color_mode_) {
         case ColorMode::DISABLE: return false;
-        case ColorMode::ENABLE:  return true;
+        case ColorMode::ENABLE: return true;
         case ColorMode::AUTO:
-        default:
-            break;
+        default: break;
     }
 
-    if ( getenv("NO_COLOR") ) return false;
+    if (getenv("NO_COLOR")) return false;
     // must be a tty
-    if ( isatty(STDOUT_FILENO) == 0 ) return false;
+    if (isatty(STDOUT_FILENO) == 0) return false;
     return term_supports_color();
 }
 
-void Logger::log(LogLevel level,
-                 const std::string& msg,
-                 const char* file,
-                 int line) {
-    if (!should_log(level)) return;
+void Logger::log(LogLevel message_level, const std::string& msg, const char* file, int line) {
+    if (!should_log(message_level)) return;
 
-    std::string prefix = make_prefix(level, tag_, timestamp_enabled_, file, line);
-    
+    std::string prefix = make_prefix(message_level, tag_, timestamp_enabled_, file, line);
+
     if (should_use_color()) {
-        printf("%s%s %s%s\n",
-               level_to_color(level),
-               prefix.c_str(),
-               msg.c_str(),
-               RESET);
-    } else {
-        printf("%s %s\n",
-               prefix.c_str(),
-               msg.c_str());
+        printf("%s%s %s%s\n", level_to_color(message_level), prefix.c_str(), msg.c_str(), RESET);
+    }
+    else {
+        printf("%s %s\n", prefix.c_str(), msg.c_str());
     }
 }
 

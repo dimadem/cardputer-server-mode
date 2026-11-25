@@ -47,8 +47,11 @@ bool read_text_file(const std::filesystem::path& path, std::string& value) {
 
 int32_t read_int_file(const std::filesystem::path& path, int32_t fallback = -1) {
     std::ifstream file(path);
-    int32_t value = fallback;
-    return file >> value ? value : fallback;
+    int32_t value = 0;
+    if (file >> value) {
+        return value;
+    }
+    return fallback;
 }
 
 void read_battery(DeviceStatus& status) {
@@ -70,8 +73,8 @@ void read_battery(DeviceStatus& status) {
         status.battery_percent = read_int_file(entry.path() / "capacity");
         status.battery_present = status.battery_percent >= 0;
         std::string battery_state;
-        status.battery_charging = read_text_file(entry.path() / "status", battery_state) &&
-                                  battery_state == "Charging";
+        status.battery_charging =
+            read_text_file(entry.path() / "status", battery_state) && battery_state == "Charging";
         return;
     }
 }
@@ -91,7 +94,8 @@ void read_wifi_strength(DeviceStatus& status, const std::string& interface_name)
         std::string state;
         double quality = -1.0;
         if (values >> state >> quality) {
-            status.wifi_strength_percent = std::clamp(static_cast<int32_t>(quality * 100.0 / 70.0), 0, 100);
+            status.wifi_strength_percent =
+                std::clamp(static_cast<int32_t>(quality * 100.0 / 70.0), 0, 100);
             return;
         }
     }

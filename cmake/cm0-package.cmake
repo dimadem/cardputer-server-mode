@@ -38,10 +38,6 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/config/cz-server-mode.conf"
     DESTINATION "/etc"
 )
 
-install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/audio/"
-    DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_NAME}/audio"
-    PATTERN ".DS_Store" EXCLUDE
-)
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/"
     DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_NAME}/fonts"
     PATTERN ".DS_Store" EXCLUDE

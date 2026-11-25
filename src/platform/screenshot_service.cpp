@@ -43,9 +43,8 @@ std::filesystem::path screenshot_directory() {
 std::string timestamp_filename() {
     const auto now = std::chrono::system_clock::now();
     const auto timestamp = std::chrono::system_clock::to_time_t(now);
-    const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                  now.time_since_epoch()) %
-                              1000;
+    const auto milliseconds =
+        std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
 
     std::tm local_time{};
 #if defined(_WIN32)
@@ -54,7 +53,8 @@ std::string timestamp_filename() {
     localtime_r(&timestamp, &local_time);
 #endif
 
-    char buffer[48]{};
+    // sized for any int values, so the name can never be truncated
+    char buffer[96]{};
     std::snprintf(buffer,
                   sizeof(buffer),
                   "server_mode_%04d%02d%02d_%02d%02d%02d_%03d.png",

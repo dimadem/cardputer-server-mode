@@ -43,7 +43,7 @@ public:
     Toast(lv_obj_t* parent,
           viewmodel::BaseViewModel& view_model,
           app::AssetManager& assets,
-          ToastConfig config = {});
+          const ToastConfig& config = {});
     ~Toast() override;
 
     void build() override;
@@ -56,7 +56,6 @@ public:
                           ToastTone tone = ToastTone::Default,
                           uint32_t duration_ms = 0,
                           bool scroll = false);
-    void show_persistent(const std::string& message, ToastTone tone = ToastTone::Default);
     void show_persistent_highlighted(const std::string& prefix,
                                      const std::string& highlighted,
                                      const std::string& suffix,
