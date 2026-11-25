@@ -1,85 +1,75 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
   <title>Server Mode</title>
-  <!-- cyberpunk server rack: neon outline, glitch shift, moving scan line, blinking LEDs (SMIL) -->
+  <!-- neon-noir style: a black ink-blob server on acid yellow, with chromatic glitch,
+       blinking LEDs and a glitch slice (SMIL) -->
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#140A2E"/>
-      <stop offset="1" stop-color="#05040F"/>
-    </linearGradient>
-    <linearGradient id="case" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#1B1640"/>
-      <stop offset="1" stop-color="#0C0A22"/>
-    </linearGradient>
-    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur stdDeviation="1.6" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <clipPath id="tile"><rect x="2" y="2" width="96" height="96" rx="14"/></clipPath>
+    <clipPath id="tile"><path d="M2 2 H84 L98 16 V98 H16 L2 84 Z"/></clipPath>
+    <path id="blob" d="M28 22 C33 11 65 8 74 18 C83 27 79 40 78 50 C77 60 82 66 78 73 C75 79 70 77 69 83 C68 90 62 90 61 84 C60 78 56 78 54 82 C52 89 45 92 43 86 C41 80 37 80 33 82 C27 85 21 78 24 70 C26 62 20 56 21 46 C22 36 22 30 28 22 Z"/>
+    <clipPath id="blobClip"><use href="#blob"/></clipPath>
   </defs>
 
   <g clip-path="url(#tile)">
-    <rect x="2" y="2" width="96" height="96" fill="url(#bg)"/>
-    <!-- floor grid -->
-    <g stroke="#FF2BD6" stroke-width="0.6" opacity="0.35">
-      <path d="M2 80 H98 M2 86 H98 M2 93 H98"/>
-      <path d="M50 76 L50 98 M38 76 L26 98 M62 76 L74 98 M26 76 L2 96 M74 76 L98 96"/>
+    <rect width="100" height="100" fill="#F3E600"/>
+    <!-- hazard stripes and a scan pattern -->
+    <g stroke="#0A0A0A" stroke-width="3">
+      <path d="M-4 98 L8 86 M2 104 L14 92 M8 110 L20 98"/>
+    </g>
+    <g fill="#0A0A0A" opacity="0.12">
+      <rect x="0" y="10" width="100" height="1"/><rect x="0" y="30" width="100" height="1"/>
+      <rect x="0" y="50" width="100" height="1"/><rect x="0" y="70" width="100" height="1"/>
+    </g>
+    <!-- tech label and barcode -->
+    <text x="7" y="11" font-family="DejaVu Sans Mono, monospace" font-size="6.5" font-weight="bold" fill="#0A0A0A">SRV//0x7</text>
+    <g fill="#0A0A0A">
+      <rect x="86" y="40" width="7" height="1.2"/><rect x="86" y="42.5" width="7" height="0.6"/>
+      <rect x="86" y="44" width="7" height="1.8"/><rect x="86" y="47" width="7" height="0.6"/>
+      <rect x="86" y="48.5" width="7" height="1.2"/><rect x="86" y="51" width="7" height="2"/>
     </g>
 
-    <!-- glitch ghost of the case (magenta, shifted left) -->
-    <path d="M30 12 H76 L80 16 V74 L76 78 H24 L20 74 V22 Z" fill="none" stroke="#FF2BD6" stroke-width="2" opacity="0.7"
-      transform="translate(-3 2)">
+    <!-- chromatic aberration copies of the blob -->
+    <use href="#blob" fill="#FF003C" transform="translate(-3 1)">
       <animateTransform attributeName="transform" type="translate"
-        values="-3 2;-3 2;-6 3;1 -1;-3 2" keyTimes="0;0.86;0.9;0.94;1" dur="3s" repeatCount="indefinite"/>
-    </path>
+        values="-3 1;-3 1;-7 1;-2 0;-3 1" keyTimes="0;0.8;0.84;0.9;1" dur="2.5s" repeatCount="indefinite"/>
+    </use>
+    <use href="#blob" fill="#00E5FF" transform="translate(3 -1)">
+      <animateTransform attributeName="transform" type="translate"
+        values="3 -1;3 -1;6 -2;2 0;3 -1" keyTimes="0;0.8;0.84;0.9;1" dur="2.5s" repeatCount="indefinite"/>
+    </use>
+    <!-- the blob -->
+    <use href="#blob" fill="#0A0A0A"/>
+    <!-- splashes -->
+    <circle cx="16" cy="60" r="2.4" fill="#0A0A0A"/>
+    <circle cx="84" cy="28" r="1.8" fill="#0A0A0A"/>
+    <circle cx="86" cy="80" r="2.6" fill="#0A0A0A"/>
+    <circle cx="51" cy="94" r="1.6" fill="#0A0A0A"/>
 
-    <!-- case with a cut corner -->
-    <path d="M30 12 H76 L80 16 V74 L76 78 H24 L20 74 V22 Z" fill="url(#case)" stroke="#00F0FF" stroke-width="2.2" filter="url(#glow)"/>
-    <path d="M22 21 L29 14" stroke="#00F0FF" stroke-width="1.2" opacity="0.7"/>
-
-    <!-- three rack units -->
-    <g fill="#07061A" stroke="#00F0FF" stroke-width="1" stroke-opacity="0.6">
-      <rect x="26" y="22" width="48" height="14" rx="1.5"/>
-      <rect x="26" y="40" width="48" height="14" rx="1.5"/>
-      <rect x="26" y="58" width="48" height="14" rx="1.5"/>
-    </g>
-    <!-- vents -->
-    <g stroke="#3A3A8C" stroke-width="1.6" stroke-linecap="round">
-      <path d="M30 29 H50 M30 47 H50 M30 65 H50"/>
-    </g>
-    <g stroke="#00F0FF" stroke-width="1.6" stroke-linecap="round" opacity="0.8">
-      <path d="M30 29 H38 M30 47 H44 M30 65 H34"/>
-    </g>
-
-    <!-- LEDs -->
-    <g filter="url(#glow)">
-      <circle cx="62" cy="29" r="2.4" fill="#FF2BD6">
-        <animate attributeName="opacity" values="1;0.2;1" dur="0.9s" repeatCount="indefinite"/>
+    <!-- rack units inside the blob -->
+    <g clip-path="url(#blobClip)">
+      <g fill="none" stroke="#00E5FF" stroke-width="1.4">
+        <path d="M30 28 H70 V39 H30 Z M30 44 H70 V55 H30 Z M30 60 H70 V71 H30 Z"/>
+      </g>
+      <g stroke="#F3E600" stroke-width="1.8">
+        <path d="M34 33.5 H48 M34 49.5 H52 M34 65.5 H42"/>
+      </g>
+      <circle cx="60" cy="33.5" r="2.2" fill="#FF003C">
+        <animate attributeName="opacity" values="1;0.15;1" dur="0.8s" repeatCount="indefinite"/>
       </circle>
-      <circle cx="69" cy="29" r="2.4" fill="#00F0FF"/>
-      <circle cx="62" cy="47" r="2.4" fill="#00F0FF"/>
-      <circle cx="69" cy="47" r="2.4" fill="#F5FF3B">
-        <animate attributeName="opacity" values="1;1;0.15;1" keyTimes="0;0.5;0.6;1" dur="1.6s" repeatCount="indefinite"/>
+      <circle cx="66" cy="33.5" r="2.2" fill="#00E5FF"/>
+      <circle cx="60" cy="49.5" r="2.2" fill="#00E5FF"/>
+      <circle cx="66" cy="49.5" r="2.2" fill="#FF003C"/>
+      <circle cx="60" cy="65.5" r="2.2" fill="#F3E600">
+        <animate attributeName="opacity" values="1;1;0.1;1" keyTimes="0;0.5;0.6;1" dur="1.4s" repeatCount="indefinite"/>
       </circle>
-      <circle cx="62" cy="65" r="2.4" fill="#FF2BD6">
-        <animate attributeName="opacity" values="0.2;1;0.2" dur="1.3s" begin="0.4s" repeatCount="indefinite"/>
-      </circle>
-      <circle cx="69" cy="65" r="2.4" fill="#00F0FF"/>
+      <circle cx="66" cy="65.5" r="2.2" fill="#00E5FF"/>
     </g>
 
-    <!-- scan line moving down the case -->
-    <rect x="21" y="14" width="58" height="2" fill="#00F0FF" opacity="0.35">
-      <animate attributeName="y" values="14;74;14" dur="2.6s" repeatCount="indefinite"/>
-    </rect>
-
-    <!-- glitch bars -->
-    <rect x="58" y="36" width="26" height="2.4" fill="#FF2BD6" opacity="0">
-      <animate attributeName="opacity" values="0;0;0.9;0;0" keyTimes="0;0.86;0.9;0.94;1" dur="3s" repeatCount="indefinite"/>
-    </rect>
-    <rect x="14" y="55" width="20" height="1.6" fill="#00F0FF" opacity="0">
-      <animate attributeName="opacity" values="0;0;0.9;0" keyTimes="0;0.9;0.93;1" dur="3s" repeatCount="indefinite"/>
-    </rect>
-
+    <!-- glitch slice: a strip of the image jumps sideways -->
+    <g opacity="0">
+      <rect x="18" y="45" width="64" height="4" fill="#00E5FF" transform="translate(6 0)"/>
+      <rect x="10" y="47" width="22" height="1.5" fill="#FF003C" transform="translate(6 0)"/>
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.8;0.81;0.88;0.89;1" dur="2.5s" repeatCount="indefinite"/>
+    </g>
   </g>
-  <!-- tile frame -->
-  <rect x="2.5" y="2.5" width="95" height="95" rx="14" fill="none" stroke="#FF2BD6" stroke-width="1" opacity="0.6"/>
+  <!-- cut-corner frame -->
+  <path d="M2.5 2.5 H84 L97.5 16 V97.5 H16 L2.5 84 Z" fill="none" stroke="#0A0A0A" stroke-width="2"/>
 </svg>
