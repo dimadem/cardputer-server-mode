@@ -10,10 +10,15 @@
 #include "logger.h"
 #include "server_settings.h"
 
+#include <array>
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <dirent.h>
+#include <optional>
+#include <utility>
+#include <string_view>
 #include <unistd.h>
 #include <vector>
 
@@ -21,8 +26,8 @@ namespace screen {
 namespace {
 
 constexpr const char* kStateFile = "/run/cz-server-mode/stopped-units";
-constexpr uint32_t kIdlePeriodMs = 2000;  // status refresh
-constexpr uint32_t kJobPeriodMs = 200;    // while a switch runs
+constexpr uint32_t kIdlePeriodMs = 2000; // status refresh
+constexpr uint32_t kJobPeriodMs = 200;   // while a switch runs
 constexpr uint32_t kProcRescanMs = 10000;
 
 struct MemInfo {
@@ -31,27 +36,54 @@ struct MemInfo {
     long swap_used_mb{0};
 };
 
+// "Key:   1234 kB" -> 1234 when the line starts with key
+std::optional<long> meminfo_kb(const char* line, std::string_view key) {
+    if (std::strncmp(line, key.data(), key.size()) != 0) {
+        return std::nullopt;
+    }
+    const char* start = line + key.size();
+    char* end = nullptr;
+    errno = 0;
+    const long value = std::strtol(start, &end, 10);
+    if (end == start || errno != 0) {
+        return std::nullopt;
+    }
+    return value;
+}
+
 MemInfo read_meminfo() {
-    long total = 0, avail = 0, swap_total = 0, swap_free = 0;
+    long total = 0;
+    long avail = 0;
+    long swap_total = 0;
+    long swap_free = 0;
+    const std::array<std::pair<std::string_view, long*>, 4> fields = {{
+        {"MemTotal:", &total},
+        {"MemAvailable:", &avail},
+        {"SwapTotal:", &swap_total},
+        {"SwapFree:", &swap_free},
+    }};
     if (FILE* file = std::fopen("/proc/meminfo", "r")) {
         char line[128];
-        int found = 0;
-        while (found < 4 && std::fgets(line, sizeof(line), file)) {
-            found += std::sscanf(line, "MemTotal: %ld", &total) +
-                     std::sscanf(line, "MemAvailable: %ld", &avail) +
-                     std::sscanf(line, "SwapTotal: %ld", &swap_total) +
-                     std::sscanf(line, "SwapFree: %ld", &swap_free);
+        size_t found = 0;
+        while (found < fields.size() && std::fgets(line, sizeof(line), file) != nullptr) {
+            for (const auto& [key, target] : fields) {
+                if (const auto kb = meminfo_kb(line, key)) {
+                    *target = *kb;
+                    ++found;
+                    break;
+                }
+            }
         }
         std::fclose(file);
     }
     return {total / 1024, avail / 1024, (swap_total - swap_free) / 1024};
 }
 
-bool process_is(pid_t pid, const char* name) {
+bool process_is(pid_t pid, std::string_view name) {
     char path[32];
     std::snprintf(path, sizeof(path), "/proc/%d/comm", static_cast<int>(pid));
     FILE* file = std::fopen(path, "r");
-    if (!file) {
+    if (file == nullptr) {
         return false;
     }
     char comm[32] = {};
@@ -60,23 +92,34 @@ bool process_is(pid_t pid, const char* name) {
     if (!ok) {
         return false;
     }
-    comm[std::strcspn(comm, "\n")] = '\0';
-    return std::strcmp(comm, name) == 0;
+    std::string_view read_name(comm);
+    if (!read_name.empty() && read_name.back() == '\n') {
+        read_name.remove_suffix(1);
+    }
+    return read_name == name;
 }
 
-pid_t find_process(const char* name) {
+// pid from a /proc entry name, nullopt for entries that are not processes
+std::optional<pid_t> parse_pid(const char* text) {
+    char* end = nullptr;
+    errno = 0;
+    const long value = std::strtol(text, &end, 10);
+    if (end == text || *end != '\0' || errno != 0 || value <= 0) {
+        return std::nullopt;
+    }
+    return static_cast<pid_t>(value);
+}
+
+pid_t find_process(std::string_view name) {
     DIR* proc = opendir("/proc");
-    if (!proc) {
+    if (proc == nullptr) {
         return -1;
     }
     pid_t found = -1;
-    while (auto* entry = readdir(proc)) {
-        if (entry->d_name[0] < '0' || entry->d_name[0] > '9') {
-            continue;
-        }
-        const pid_t pid = static_cast<pid_t>(std::atoi(entry->d_name));
-        if (process_is(pid, name)) {
-            found = pid;
+    while (const auto* entry = readdir(proc)) {
+        const auto pid = parse_pid(entry->d_name);
+        if (pid && process_is(*pid, name)) {
+            found = *pid;
             break;
         }
     }
@@ -102,9 +145,9 @@ ServerPanel::ServerPanel(lv_obj_t* content,
     lv_obj_set_style_pad_row(column, 2, 0);
     lv_obj_clear_flag(column, LV_OBJ_FLAG_SCROLLABLE);
 
-    auto* big = assets.load_standard_font(18);
-    auto* regular = assets.load_standard_font(14, app::StandardFontWeight::Regular);
-    auto* small = assets.load_standard_font(12, app::StandardFontWeight::Regular);
+    const auto* big = assets.load_standard_font(18);
+    const auto* regular = assets.load_standard_font(14, app::StandardFontWeight::Regular);
+    const auto* small = assets.load_standard_font(12, app::StandardFontWeight::Regular);
     auto* dark = view_model_.dark_mode_subject();
 
     mode_label_ = make_label(column, big, &lv_font_montserrat_20, dark);
@@ -114,7 +157,9 @@ ServerPanel::ServerPanel(lv_obj_t* content,
     message_label_ = make_label(column, small, &lv_font_montserrat_12, dark);
     auto* hint_label = make_label(column, small, &lv_font_montserrat_12, dark);
     lv_label_set_text(hint_label, "Tab: settings · hold ESC: exit");
-    lv_obj_set_style_text_color(hint_label, view::palette(view_model_.is_dark_mode()).text_disabled, 0);
+    lv_obj_set_style_text_color(hint_label,
+                                view::palette(view_model_.is_dark_mode()).text_disabled,
+                                0);
 
     platform::set_screen_key_handler(key_cb, this);
     timer_ = lv_timer_create(tick_cb, kIdlePeriodMs, this);
@@ -130,7 +175,7 @@ ServerPanel::~ServerPanel() {
         lv_timer_delete(timer_);
     }
     job_.wait();
-    view_model_.set_busy(false);  // not set_busy(): the timer is gone
+    view_model_.set_busy(false); // not set_busy(): the timer is gone
     SudoJob::wipe(password_);
 }
 
@@ -143,16 +188,15 @@ void ServerPanel::tick_cb(lv_timer_t* timer) {
         panel->refresh_status();
         return;
     }
-    int exit_code = 0;
-    if (panel->job_.poll(exit_code)) {
-        panel->finish_switch(exit_code);
+    if (const auto result = panel->job_.poll()) {
+        panel->finish_switch(*result);
         return;
     }
     const uint32_t elapsed = panel->job_.elapsed_s();
-    if (elapsed != panel->last_elapsed_s_) {  // the text changes once per second
+    if (elapsed != panel->last_elapsed_s_) { // the text changes once per second
         panel->last_elapsed_s_ = elapsed;
-        panel->set_message(std::string(panel->job_to_server_ ? "Enabling server mode… "
-                                                              : "Restoring desktop… ") +
+        panel->set_message(std::string(panel->job_target_ == Mode::Server ? "Enabling server mode… "
+                                                                          : "Restoring desktop… ") +
                                std::to_string(elapsed) + " s",
                            Tone::Info);
     }
@@ -160,15 +204,15 @@ void ServerPanel::tick_cb(lv_timer_t* timer) {
 
 bool ServerPanel::key_cb(uint32_t key, void* user_data) {
     auto* panel = static_cast<ServerPanel*>(user_data);
-    return panel && panel->on_key(key);
+    return panel != nullptr && panel->on_key(key);
 }
 
 bool ServerPanel::on_key(uint32_t key) {
     if (job_.running()) {
-        return true;  // ignore keys while a switch is running
+        return true; // ignore keys while a switch is running
     }
     if (key == kKeyTab) {
-        view_model_.show_butter_page();  // settings page
+        view_model_.show_butter_page(); // settings page
         return true;
     }
     if (key == LV_KEY_ENTER) {
@@ -196,17 +240,21 @@ bool ServerPanel::desktop_running() {
 }
 
 void ServerPanel::refresh_status() {
-    server_mode_ = access(kStateFile, F_OK) == 0;
+    mode_ = access(kStateFile, F_OK) == 0 ? Mode::Server : Mode::Normal;
+    const bool server = mode_ == Mode::Server;
     const auto mem = read_meminfo();
     const bool desktop = desktop_running();
 
     char text[96];
     const auto colors = view::palette(view_model_.is_dark_mode());
-    set_text_if_changed(mode_label_, server_mode_ ? "Mode: SERVER" : "Mode: normal");
-    lv_obj_set_style_text_color(mode_label_, server_mode_ ? colors.success : colors.warning, 0);
+    set_text_if_changed(mode_label_, server ? "Mode: SERVER" : "Mode: normal");
+    lv_obj_set_style_text_color(mode_label_, server ? colors.success : colors.warning, 0);
     std::snprintf(text, sizeof(text), "Free %ld of %ld MB", mem.avail_mb, mem.total_mb);
     set_text_if_changed(mem_label_, text);
-    std::snprintf(text, sizeof(text), "Swap %ld MB · desktop %s", mem.swap_used_mb,
+    std::snprintf(text,
+                  sizeof(text),
+                  "Swap %ld MB · desktop %s",
+                  mem.swap_used_mb,
                   desktop ? "running" : "stopped");
     set_text_if_changed(detail_label_, text);
 }
@@ -231,9 +279,9 @@ void ServerPanel::start_switch() {
     }
 
     refresh_status();
-    job_to_server_ = !server_mode_;
+    job_target_ = mode_ == Mode::Server ? Mode::Normal : Mode::Server;
     std::vector<std::string> argv;
-    if (job_to_server_) {
+    if (job_target_ == Mode::Server) {
         const auto groups = settings::load_enabled_groups();
         if (groups.empty()) {
             SudoJob::wipe(password_);
@@ -241,10 +289,12 @@ void ServerPanel::start_switch() {
             set_message("Nothing selected in settings", Tone::Warning);
             return;
         }
-        argv.push_back(settings::script_path("server-mode.sh"));
-        argv.insert(argv.end(), groups.begin(), groups.end());
-    } else {
-        argv.push_back(settings::script_path("normal-mode.sh"));
+        argv.push_back(settings::script_path(settings::Script::ServerMode));
+        const auto ids = groups.ids();
+        argv.insert(argv.end(), ids.begin(), ids.end());
+    }
+    else {
+        argv.push_back(settings::script_path(settings::Script::NormalMode));
     }
 
     std::string error;
@@ -256,36 +306,47 @@ void ServerPanel::start_switch() {
     }
     set_busy(true);
     last_elapsed_s_ = UINT32_MAX;
-    LOG_INFO("switching to {} mode via {}", job_to_server_ ? "server" : "normal", argv.front());
-    set_message(job_to_server_ ? "Enabling server mode…" : "Restoring desktop…", Tone::Info);
+    LOG_INFO("switching to {} mode via {}",
+             job_target_ == Mode::Server ? "server" : "normal",
+             argv.front());
+    set_message(job_target_ == Mode::Server ? "Enabling server mode…" : "Restoring desktop…",
+                Tone::Info);
 }
 
-void ServerPanel::finish_switch(int exit_code) {
+void ServerPanel::finish_switch(const JobResult& result) {
     set_busy(false);
     const auto& output = job_.output();
-    LOG_INFO("switch finished, exit code {}, output:\n{}", exit_code, output);
-    proc_scanned_ = false;  // the desktop just started or stopped: look again now
+    LOG_INFO("switch finished, exit code {}, output:\n{}", result.exit_code, output);
+    proc_scanned_ = false; // the desktop just started or stopped: look again now
     refresh_status();
 
-    if (exit_code == 0) {
-        std::string summary = "Done";
-        constexpr const char* kMarker = "MemAvailable: ";
-        if (const auto pos = output.rfind(kMarker); pos != std::string::npos) {
-            const auto start = pos + std::strlen(kMarker);
-            summary += ": " + output.substr(start, output.find('\n', start) - start);
-        } else if (output.find("already") != std::string::npos) {
-            summary = "Already in this mode";
-        }
-        set_message(summary, Tone::Success);
-    } else if (SudoJob::wrong_password(output)) {
-        set_message("Wrong password", Tone::Error);
-    } else if (exit_code == 3) {
-        set_message("Busy: another switch is running", Tone::Warning);
-    } else if (exit_code == 127) {
-        set_message("sudo or script not found", Tone::Error);
-    } else {
-        set_message("Partly failed, code " + std::to_string(exit_code) + " (see log)", Tone::Error);
+    switch (result.outcome) {
+        case JobOutcome::Success: set_message(success_summary(output), Tone::Success); return;
+        case JobOutcome::WrongPassword: set_message("Wrong password", Tone::Error); return;
+        case JobOutcome::Busy:
+            set_message("Busy: another switch is running", Tone::Warning);
+            return;
+        case JobOutcome::NotFound: set_message("sudo or script not found", Tone::Error); return;
+        case JobOutcome::Killed: set_message("Switch was killed (see log)", Tone::Error); return;
+        case JobOutcome::PartialFailure:
+        case JobOutcome::BadArguments:
+        case JobOutcome::OtherError: break;
     }
+    set_message("Partly failed, code " + std::to_string(result.exit_code) + " (see log)",
+                Tone::Error);
+}
+
+// "Done: 130 MB -> 184 MB" from the script's MemAvailable line.
+std::string ServerPanel::success_summary(const std::string& output) {
+    constexpr std::string_view kMarker = "MemAvailable: ";
+    if (const auto pos = output.rfind(kMarker); pos != std::string::npos) {
+        const auto start = pos + kMarker.size();
+        return "Done: " + output.substr(start, output.find('\n', start) - start);
+    }
+    if (output.find("already") != std::string::npos) {
+        return "Already in this mode";
+    }
+    return "Done";
 }
 
 } // namespace screen

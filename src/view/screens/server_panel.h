@@ -35,6 +35,8 @@ public:
     ServerPanel& operator=(const ServerPanel&) = delete;
 
 private:
+    enum class Mode { Normal, Server };
+
     static void tick_cb(lv_timer_t* timer);
     static bool key_cb(uint32_t key, void* user_data);
 
@@ -42,7 +44,8 @@ private:
     void refresh_status();
     bool desktop_running();
     void start_switch();
-    void finish_switch(int exit_code);
+    void finish_switch(const JobResult& result);
+    static std::string success_summary(const std::string& output);
     void set_message(const std::string& text, Tone tone);
     void update_password_label();
     void set_busy(bool busy);
@@ -55,8 +58,8 @@ private:
     lv_obj_t* message_label_{nullptr};
     lv_timer_t* timer_{nullptr};
 
-    bool server_mode_{false};
-    bool job_to_server_{false};
+    Mode mode_{Mode::Normal};
+    Mode job_target_{Mode::Server}; // the mode the running switch goes to
     uint32_t last_elapsed_s_{UINT32_MAX};
     std::string password_;
     SudoJob job_;

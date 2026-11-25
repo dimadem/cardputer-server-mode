@@ -25,8 +25,7 @@ SudoJob::~SudoJob() {
 }
 
 void SudoJob::wait() {
-    int exit_code = 0;
-    while (running() && !poll(exit_code)) {
+    while (running() && !poll()) {
         usleep(50 * 1000);
     }
 }
@@ -44,13 +43,15 @@ bool SudoJob::wrong_password(const std::string& output) {
            output.find("password is required") != std::string::npos;
 }
 
-bool SudoJob::start(std::string& password, const std::vector<std::string>& argv, std::string& error) {
+bool SudoJob::start(std::string& password,
+                    const std::vector<std::string>& argv,
+                    std::string& error) {
     if (running()) {
         wipe(password);
         error = "busy";
         return false;
     }
-    std::signal(SIGPIPE, SIG_IGN);  // sudo may exit before reading the password
+    std::signal(SIGPIPE, SIG_IGN); // sudo may exit before reading the password
 
     std::vector<char*> args;
     for (const char* fixed : {"sudo", "-S", "-k", "-p", ""}) {
@@ -84,7 +85,7 @@ bool SudoJob::start(std::string& password, const std::vector<std::string>& argv,
         return false;
     }
     if (pid == 0) {
-        setenv("LC_ALL", "C", 1);  // sudo messages in English: wrong_password() matches them
+        setenv("LC_ALL", "C", 1); // sudo messages in English: wrong_password() matches them
         dup2(in_pipe[0], STDIN_FILENO);
         dup2(out_pipe[1], STDOUT_FILENO);
         dup2(out_pipe[1], STDERR_FILENO);
@@ -94,16 +95,18 @@ bool SudoJob::start(std::string& password, const std::vector<std::string>& argv,
 
     close(in_pipe[0]);
     close(out_pipe[1]);
-    password.push_back('\n');  // in place: no extra copy of the secret
+    password.push_back('\n'); // in place: no extra copy of the secret
     size_t offset = 0;
     while (offset < password.size()) {
         const ssize_t n = write(in_pipe[1], password.data() + offset, password.size() - offset);
         if (n > 0) {
             offset += static_cast<size_t>(n);
-        } else if (n < 0 && errno == EINTR) {
+        }
+        else if (n < 0 && errno == EINTR) {
             continue;
-        } else {
-            break;  // EPIPE: sudo exited early, its exit code tells why
+        }
+        else {
+            break; // EPIPE: sudo exited early, its exit code tells why
         }
     }
     wipe(password);
@@ -119,21 +122,48 @@ bool SudoJob::start(std::string& password, const std::vector<std::string>& argv,
 
 void SudoJob::drain() {
     char buffer[512];
-    ssize_t n;
+    ssize_t n = 0;
     while (fd_ >= 0 && (n = read(fd_, buffer, sizeof(buffer))) > 0) {
         output_.append(buffer, static_cast<size_t>(n));
     }
 }
 
-bool SudoJob::poll(int& exit_code) {
+// Exit codes of scripts/*.sh, plus 127 from the child when execv fails.
+enum class ScriptExit : int {
+    Ok = 0,
+    PartialFailure = 1,
+    BadArguments = 2,
+    Busy = 3,
+    NotFound = 127
+};
+
+JobResult SudoJob::classify(int status) const {
+    if (!WIFEXITED(status)) {
+        return {JobOutcome::Killed, -1};
+    }
+    const int code = WEXITSTATUS(status);
+    if (code != 0 && wrong_password(output_)) {
+        return {JobOutcome::WrongPassword, code};
+    }
+    switch (static_cast<ScriptExit>(code)) {
+        case ScriptExit::Ok: return {JobOutcome::Success, code};
+        case ScriptExit::PartialFailure: return {JobOutcome::PartialFailure, code};
+        case ScriptExit::BadArguments: return {JobOutcome::BadArguments, code};
+        case ScriptExit::Busy: return {JobOutcome::Busy, code};
+        case ScriptExit::NotFound: return {JobOutcome::NotFound, code};
+    }
+    return {JobOutcome::OtherError, code};
+}
+
+std::optional<JobResult> SudoJob::poll() {
     if (!running()) {
-        return false;
+        return std::nullopt;
     }
     drain();
     int status = 0;
     const pid_t done = waitpid(pid_, &status, WNOHANG);
     if (done == 0 || (done < 0 && errno == EINTR)) {
-        return false;
+        return std::nullopt;
     }
     drain();
     if (fd_ >= 0) {
@@ -141,8 +171,10 @@ bool SudoJob::poll(int& exit_code) {
         fd_ = -1;
     }
     pid_ = -1;
-    exit_code = done > 0 && WIFEXITED(status) ? WEXITSTATUS(status) : -1;
-    return true;
+    if (done < 0) {
+        return JobResult{JobOutcome::Killed, -1}; // the child is gone (ECHILD): no status
+    }
+    return classify(status);
 }
 
 uint32_t SudoJob::elapsed_s() const {

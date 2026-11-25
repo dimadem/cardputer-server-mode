@@ -630,5 +630,21 @@ target_link_libraries(${PROJECT_NAME}
         ${PROJECT_NAME}_viewmodel
 )
 
+# Compiler warnings for the app code (not for LVGL and other dependencies).
+option(APP_STRICT_WARNINGS "Build the app code with extra compiler warnings" ON)
+option(APP_WARNINGS_AS_ERRORS "Treat compiler warnings in the app code as errors" OFF)
+if(APP_STRICT_WARNINGS AND NOT MSVC)
+    foreach(app_target
+            ${PROJECT_NAME} ${PROJECT_NAME}_platform ${PROJECT_NAME}_core ${PROJECT_NAME}_model
+            ${PROJECT_NAME}_reactive ${PROJECT_NAME}_view ${PROJECT_NAME}_viewmodel logger)
+        target_compile_options(${app_target} PRIVATE
+            -Wall -Wextra -Wpedantic -Wshadow -Wnon-virtual-dtor -Woverloaded-virtual
+            -Wimplicit-fallthrough -Wswitch-enum -Wunused -Wnull-dereference)
+        if(APP_WARNINGS_AS_ERRORS)
+            target_compile_options(${app_target} PRIVATE -Werror)
+        endif()
+    endforeach()
+endif()
+
 # Package deb
 include(cmake/cm0-package.cmake)

@@ -7,6 +7,7 @@
 # The first apply saves config.txt/cmdline.txt as *.cz-orig; reset puts them back.
 # Boot files are always replaced atomically (temp file + sync + rename) so a power cut cannot truncate them.
 set -eu
+# shellcheck source=common.sh
 . "$(dirname "$(readlink -f "$0")")/common.sh"
 
 CFG=/boot/firmware/config.txt

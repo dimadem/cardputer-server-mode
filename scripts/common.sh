@@ -1,4 +1,5 @@
-# shared settings for the Server Mode helper scripts
+# shared settings for the Server Mode helper scripts (sourced, not run)
+# shellcheck shell=bash disable=SC2034  # the variables are used by the scripts that source this file
 STATE_DIR=/run/cz-server-mode          # tmpfs: a reboot always forgets the runtime state
 STATE_FILE=$STATE_DIR/stopped-units
 LOCK_FILE=/run/cz-server-mode.lock
@@ -49,8 +50,8 @@ user_systemctl() {
     TARGET_USER=$(target_user); [ -n "$TARGET_USER" ] || return 1
     TARGET_UID=$(id -u "$TARGET_USER") || return 1
   fi
-  runuser -u "$TARGET_USER" -- env XDG_RUNTIME_DIR=/run/user/$TARGET_UID \
-    DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$TARGET_UID/bus systemctl --user "$@"
+  runuser -u "$TARGET_USER" -- env XDG_RUNTIME_DIR="/run/user/$TARGET_UID" \
+    DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$TARGET_UID/bus" systemctl --user "$@"
 }
 
 mem_avail_mb() { awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo; }

@@ -1,0 +1,49 @@
+# clang-tidy checks for the app code. Run: tools/check.sh (or clang-tidy -p build/cp0-native <file>)
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-signed-bitwise,
+  -bugprone-macro-parentheses,
+  clang-analyzer-*,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
+  cppcoreguidelines-init-variables,
+  cppcoreguidelines-pro-type-cstyle-cast,
+  cppcoreguidelines-pro-type-member-init,
+  cppcoreguidelines-special-member-functions,
+  cppcoreguidelines-slicing,
+  misc-unused-parameters,
+  misc-unused-using-decls,
+  misc-unused-alias-decls,
+  misc-redundant-expression,
+  misc-misplaced-const,
+  modernize-use-nullptr,
+  modernize-use-override,
+  modernize-use-using,
+  modernize-use-emplace,
+  modernize-redundant-void-arg,
+  modernize-use-equals-default,
+  modernize-use-equals-delete,
+  modernize-use-std-numbers,
+  performance-*,
+  -performance-enum-size,
+  readability-const-return-type,
+  readability-container-size-empty,
+  readability-duplicate-include,
+  readability-else-after-return,
+  readability-inconsistent-declaration-parameter-name,
+  readability-make-member-function-const,
+  readability-non-const-parameter,
+  readability-redundant-*,
+  readability-simplify-boolean-expr,
+  readability-static-definition-in-anonymous-namespace,
+  readability-implicit-bool-conversion
+CheckOptions:
+  cppcoreguidelines-special-member-functions.AllowMissingMoveFunctionsWhenCopyIsDeleted: true
+  cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor: true
+  readability-implicit-bool-conversion.AllowPointerConditions: true
+  readability-implicit-bool-conversion.AllowIntegerConditions: false
+# headers written for this app; the template headers keep the upstream style
+HeaderFilterRegex: '.*/src/(view/screens/(server_panel|advanced_panel|sudo_job|server_settings|panel_common)|platform/linux_input)\.h'
+WarningsAsErrors: ''
+FormatStyle: file

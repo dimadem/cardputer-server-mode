@@ -55,7 +55,7 @@ namespace {
 
 void quit_requested_observer(lv_observer_t* observer, lv_subject_t* subject) {
     auto* running = static_cast<bool*>(lv_observer_get_user_data(observer));
-    if (running && lv_subject_get_int(subject)) {
+    if (running && lv_subject_get_int(subject) != 0) {
         *running = false;
     }
 }
@@ -217,7 +217,7 @@ private:
                                     bool long_pressed,
                                     void* user_data) {
         auto* controller = static_cast<ShortcutController*>(user_data);
-        return controller && controller->handle_key(key, long_pressed);
+        return controller != nullptr && controller->handle_key(key, long_pressed);
     }
 
     static void key_release_listener(uint32_t key, const char*, void* user_data) {
@@ -343,7 +343,7 @@ int Application::run() {
     ) {
         // sleep until the next LVGL timer is due (input is polled by an LVGL timer too)
         const uint32_t idle_ms = lv_timer_handler();
-        lv_delay_ms(idle_ms < 30 ? (idle_ms ? idle_ms : 1) : 30);
+        lv_delay_ms(idle_ms < 30 ? (idle_ms != 0 ? idle_ms : 1) : 30);
     }
 
     if (quit_observer) {

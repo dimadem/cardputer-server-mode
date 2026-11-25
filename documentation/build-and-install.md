@@ -31,6 +31,35 @@ rsync -a --exclude build ./ <user>@<board>.local:cz-server-mode/
 ssh <user>@<board>.local 'cd cz-server-mode && cmake --build --preset cp0-device-rel -j2'
 ```
 
+## Static checks
+
+The `tools/check.sh` script examines the code with these tools:
+
+- The `clang-format` tool examines the code style. The configuration is in `.clang-format`.
+- The `clang-tidy` tool finds bugs, unsafe conversions and old C++ constructs. The configuration is in `.clang-tidy`.
+- The `cppcheck` tool finds bugs and functions that the code does not use (dead code).
+- The `shellcheck` tool finds problems in the shell scripts.
+
+The build also uses strict compiler warnings for the app code (`APP_STRICT_WARNINGS`, on by default). To stop the build on a warning, set `-DAPP_WARNINGS_AS_ERRORS=ON`.
+
+To do the checks on the board, do these steps:
+
+1. Install the tools in a Python virtual environment. This does not change the system packages.
+
+   ```shell
+   python3 -m venv ~/.cache/cz-lint-venv
+   ~/.cache/cz-lint-venv/bin/pip install clang-format clang-tidy cppcheck shellcheck-py
+   ```
+
+2. Build the app. The checks use `build/cp0-native/compile_commands.json`.
+3. Start the checks:
+
+   ```shell
+   tools/check.sh
+   ```
+
+On the board, clang-tidy takes approximately 8 minutes. The script shows only the problems in the files of this app. The template files keep the upstream style.
+
 ## Install the scripts
 
 ```shell

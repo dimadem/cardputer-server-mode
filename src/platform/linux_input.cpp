@@ -102,12 +102,12 @@ void dispatch_nav_key(uint32_t key) {
 }
 
 bool emit_global_key(uint32_t key, bool long_pressed) {
-    return global_key_listener &&
+    return global_key_listener != nullptr &&
            global_key_listener(key, describe_key(key), long_pressed, global_key_listener_user_data);
 }
 
 void long_press_timer_cb(lv_timer_t*) {
-    if (!pressed_key || long_press_sent || lv_tick_elaps(press_started_at) < kLongPressMs) {
+    if (pressed_key == 0 || long_press_sent || lv_tick_elaps(press_started_at) < kLongPressMs) {
         return;
     }
 
@@ -302,14 +302,15 @@ void evdev_read_cb(lv_indev_t* indev, lv_indev_data_t* data) {
         }
         // A release reports the key its press produced: Shift may have changed in between.
         auto& held = keypad->pressed_keys[input.code];
-        const uint32_t key = input.value ? map_evdev_key(input.code) : held;
-        held = input.value ? key : 0;
-        if (!key) {
+        const bool key_down = input.value != 0;  // 1 press, 2 autorepeat, 0 release
+        const uint32_t key = key_down ? map_evdev_key(input.code) : held;
+        held = key_down ? key : 0;
+        if (key == 0) {
             continue;
         }
 
         keypad->key = key;
-        keypad->state = input.value ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+        keypad->state = key_down ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
         keypad->router_event_pending = true;
         keypad->router_key = key;
         keypad->router_pressed = keypad->state == LV_INDEV_STATE_PRESSED;

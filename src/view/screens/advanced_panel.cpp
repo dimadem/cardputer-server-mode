@@ -12,37 +12,13 @@
 
 #include <algorithm>
 #include <array>
-#include <cstdio>
-#include <sstream>
+#include <iterator>
 
 namespace screen {
 namespace {
 
 constexpr uint32_t kJobPeriodMs = 200;
-constexpr std::array<int, 4> kGpuValues = {128, 64, 32, 16};
 constexpr int kListHeight = 94;
-
-std::map<std::string, std::string> read_advanced_status() {
-    std::map<std::string, std::string> values;
-    const std::string command = settings::script_path("advanced.sh") + " status 2>/dev/null";
-    FILE* pipe = popen(command.c_str(), "r");
-    if (!pipe) {
-        return values;
-    }
-    char buffer[256];
-    std::string output;
-    while (fgets(buffer, sizeof(buffer), pipe)) output += buffer;
-    if (pclose(pipe) != 0) {
-        return {};
-    }
-    std::istringstream stream(output);
-    std::string token;
-    while (stream >> token) {
-        const auto eq = token.find('=');
-        if (eq != std::string::npos) values[token.substr(0, eq)] = token.substr(eq + 1);
-    }
-    return values;
-}
 
 } // namespace
 
@@ -53,8 +29,8 @@ AdvancedPanel::AdvancedPanel(lv_obj_t* content,
     password_.reserve(kMaxPassword + 1);
     row_font_ = assets.load_standard_font(13, app::StandardFontWeight::Regular);
     if (!row_font_) row_font_ = &lv_font_montserrat_12;
-    auto* regular = assets.load_standard_font(14, app::StandardFontWeight::Regular);
-    auto* small = assets.load_standard_font(12, app::StandardFontWeight::Regular);
+    const auto* regular = assets.load_standard_font(14, app::StandardFontWeight::Regular);
+    const auto* small = assets.load_standard_font(12, app::StandardFontWeight::Regular);
     auto* dark = view_model_.dark_mode_subject();
 
     auto* column = lv_obj_create(content);
@@ -78,29 +54,40 @@ AdvancedPanel::AdvancedPanel(lv_obj_t* content,
     lv_obj_set_style_pad_hor(message_label_, 4, 0);
 
     // ---- items
+    using settings::BootFlag;
+    const auto header = [](std::string_view title) { return Item{Kind::Header, title}; };
+    const auto flag = [](std::string_view title, BootFlag boot_flag) {
+        Item item{Kind::Flag, title};
+        item.flag = boot_flag;
+        return item;
+    };
+
     const auto enabled = settings::load_enabled_groups();
-    add_item({Kind::Header, "Server mode stops (instant):", ""});
-    for (const auto& group : settings::stop_groups()) {
-        const bool on = std::find(enabled.begin(), enabled.end(), group.id) != enabled.end();
-        add_item({Kind::Group, group.title, group.id, on});
+    add_item(header("Server mode stops (instant):"));
+    for (const auto& info : settings::kStopGroups) {
+        Item item{Kind::Group, info.title};
+        item.group = info.group;
+        item.value = enabled.contains(info.group);
+        add_item(item);
     }
-    add_item({Kind::Header, "Disable at boot (reboot):", ""});
-    add_item({Kind::Flag, "HDMI", "hdmi_off"});
-    add_item({Kind::Flag, "Camera", "camera_off"});
-    add_item({Kind::Flag, "cloud-init", "cloudinit_off"});
-    add_item({Kind::Header, "Boot (reboot):", ""});
-    add_item({Kind::Gpu, "GPU memory", "gpu"});
-    add_item({Kind::Flag, "Boot into server mode", "boot_server"});
-    add_item({Kind::Reset, "Reset all to defaults", "reset"});
+    add_item(header("Disable at boot (reboot):"));
+    add_item(flag("HDMI", BootFlag::HdmiOff));
+    add_item(flag("Camera", BootFlag::CameraOff));
+    add_item(flag("cloud-init", BootFlag::CloudInitOff));
+    add_item(header("Boot (reboot):"));
+    add_item(Item{Kind::Gpu, "GPU memory"});
+    add_item(flag("Boot into server mode", BootFlag::BootServer));
+    add_item(Item{Kind::Reset, "Reset all to defaults"});
 
     load_status();
-    selected_ = 1;  // first selectable row
+    selected_ = 1; // first selectable row
     render_all();
 
     update_password_label();
-    if (current_.empty()) {
+    if (!status_) {
         set_message("Boot status unavailable: reboot options disabled", Tone::Error);
-    } else {
+    }
+    else {
         set_message("↑↓ select · ←→ change · Tab back", Tone::Info);
     }
 
@@ -128,7 +115,10 @@ void AdvancedPanel::add_item(Item item) {
     lv_obj_set_style_radius(item.row, 3, 0);
     lv_obj_clear_flag(item.row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(item.row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(item.row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_flex_align(item.row,
+                          LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
 
     item.label = lv_label_create(item.row);
     lv_obj_set_flex_grow(item.label, 1);
@@ -138,65 +128,58 @@ void AdvancedPanel::add_item(Item item) {
     item.value_label = lv_label_create(item.row);
     lv_obj_set_style_text_font(item.value_label, row_font_, 0);
     lv_label_set_text(item.value_label, "");
-    items_.push_back(std::move(item));
+    items_.push_back(item);
 }
 
 // ---- state from advanced.sh vs the choices on screen
 
 void AdvancedPanel::load_status() {
-    current_ = read_advanced_status();
+    status_ = settings::read_boot_status();
+    if (!status_) {
+        return;
+    }
     for (auto& item : items_) {
         if (item.kind == Kind::Gpu) {
-            item.gpu = status_int("gpu", item.gpu);
-        } else if (item.kind == Kind::Flag) {
-            item.value = status_int(item.key.c_str(), 0) != 0;
+            item.gpu = settings::gpu_from_megabytes(status_->gpu_mb).value_or(item.gpu);
+        }
+        else if (item.kind == Kind::Flag) {
+            item.value = status_->flag(item.flag);
         }
     }
 }
 
-int AdvancedPanel::status_int(const char* key, int fallback) const {
-    const auto it = current_.find(key);
-    if (it == current_.end()) return fallback;
-    try {
-        return std::stoi(it->second);
-    } catch (...) {
-        return fallback;
-    }
-}
-
-std::string AdvancedPanel::enabled_groups_csv() const {
-    std::string csv;
+settings::GroupSet AdvancedPanel::enabled_groups() const {
+    settings::GroupSet groups;
     for (const auto& item : items_) {
-        if (item.kind == Kind::Group && item.value) csv += (csv.empty() ? "" : ",") + item.key;
+        if (item.kind == Kind::Group) groups.set(item.group, item.value);
     }
-    return csv;
+    return groups;
 }
 
 // The boot unit stops the groups chosen when it was written: "*" when they differ now.
 bool AdvancedPanel::boot_groups_outdated() const {
-    if (status_int("boot_server", 0) == 0) return false;
-    const auto it = current_.find("boot_groups");
-    std::string unit_groups = it == current_.end() ? "" : it->second;
-    if (unit_groups.empty()) {  // older unit without groups: it stopped all of them
-        for (const auto& group : settings::stop_groups()) {
-            unit_groups += (unit_groups.empty() ? "" : ",") + std::string(group.id);
-        }
-    }
-    return unit_groups != enabled_groups_csv();
+    return status_ && status_->boot_server && status_->boot_groups != enabled_groups();
 }
 
 bool AdvancedPanel::item_changed(const Item& item) const {
-    if (current_.empty()) return false;  // unknown device state: nothing to compare with
-    if (item.kind == Kind::Gpu) return status_int("gpu", 64) != item.gpu;
-    if (item.kind != Kind::Flag) return false;
-    const bool now = status_int(item.key.c_str(), 0) != 0;
-    if (now != item.value) return true;
-    return item.key == "boot_server" && item.value && boot_groups_outdated();
+    if (!status_) return false; // unknown device state: nothing to compare with
+    switch (item.kind) {
+        case Kind::Gpu: return settings::megabytes(item.gpu) != status_->gpu_mb;
+        case Kind::Flag:
+            if (status_->flag(item.flag) != item.value) return true;
+            return item.flag == settings::BootFlag::BootServer && item.value &&
+                   boot_groups_outdated();
+        case Kind::Header:
+        case Kind::Group:
+        case Kind::Reset: return false;
+    }
+    return false;
 }
 
 bool AdvancedPanel::has_boot_changes() const {
-    return !current_.empty() &&
-           std::any_of(items_.begin(), items_.end(), [this](const Item& item) { return item_changed(item); });
+    return status_ && std::any_of(items_.begin(), items_.end(), [this](const Item& item) {
+               return item_changed(item);
+           });
 }
 
 // Only what differs from the device goes to advanced.sh.
@@ -205,10 +188,14 @@ std::vector<std::string> AdvancedPanel::changed_args() const {
     for (const auto& item : items_) {
         if (!item_changed(item)) continue;
         if (item.kind == Kind::Gpu) {
-            args.push_back("gpu=" + std::to_string(item.gpu));
-        } else {
-            args.push_back(item.key + "=" + (item.value ? "1" : "0"));
-            if (item.key == "boot_server" && item.value) args.push_back("groups=" + enabled_groups_csv());
+            args.push_back("gpu=" + std::to_string(settings::megabytes(item.gpu)));
+        }
+        else if (item.kind == Kind::Flag) {
+            args.push_back(std::string(settings::flag_key(item.flag)) + "=" +
+                           (item.value ? "1" : "0"));
+            if (item.flag == settings::BootFlag::BootServer && item.value) {
+                args.push_back("groups=" + enabled_groups().csv());
+            }
         }
     }
     return args;
@@ -225,31 +212,36 @@ void AdvancedPanel::render_item(size_t index) {
     bool active = false;
     switch (item.kind) {
         case Kind::Header:
-        case Kind::Reset:
-            break;
+        case Kind::Reset: break;
         case Kind::Group:
         case Kind::Flag:
             active = item.value;
             value = item.value ? "yes" : "no";
             break;
         case Kind::Gpu:
-            active = item.gpu != 128;
-            value = "< " + std::to_string(item.gpu) + " MB >";
+            active = item.gpu != settings::GpuMemory::Mb128;
+            value = "< " + std::to_string(settings::megabytes(item.gpu)) + " MB >";
             break;
     }
     const bool changed = item_changed(item);
-    std::string name = (item.kind == Kind::Group || item.kind == Kind::Gpu || item.kind == Kind::Flag ? "  " : "") +
-                       item.title;
+    const bool indented =
+        item.kind == Kind::Group || item.kind == Kind::Gpu || item.kind == Kind::Flag;
+    std::string name = std::string(indented ? "  " : "") + std::string(item.title);
     if (changed) name += " *";
     set_text_if_changed(item.label, name.c_str());
     set_text_if_changed(item.value_label, value.c_str());
 
     lv_color_t color = colors.text;
-    if (item.kind == Kind::Header) color = colors.text_disabled;
-    else if (item.kind == Kind::Reset) color = colors.error;
-    else if (changed) color = colors.warning;
+    if (item.kind == Kind::Header)
+        color = colors.text_disabled;
+    else if (item.kind == Kind::Reset)
+        color = colors.error;
+    else if (changed)
+        color = colors.warning;
     lv_obj_set_style_text_color(item.label, color, 0);
-    lv_obj_set_style_text_color(item.value_label, active ? colors.success : colors.text_disabled, 0);
+    lv_obj_set_style_text_color(item.value_label,
+                                active ? colors.success : colors.text_disabled,
+                                0);
 
     lv_obj_set_style_bg_color(item.row, colors.primary, 0);
     lv_obj_set_style_bg_opa(item.row, index == selected_ ? LV_OPA_30 : LV_OPA_TRANSP, 0);
@@ -284,15 +276,12 @@ void AdvancedPanel::move_selection(int delta) {
 // ---- editing
 
 void AdvancedPanel::save_groups() {
-    std::vector<std::string> groups;
-    for (const auto& item : items_) {
-        if (item.kind == Kind::Group && item.value) groups.push_back(item.key);
-    }
-    if (settings::save_enabled_groups(groups)) {
+    if (settings::save_enabled_groups(enabled_groups())) {
         set_message(boot_groups_outdated() ? "Saved. For boot: Enter (reboot)"
                                            : "Saved: applies on next server mode switch",
                     Tone::Success);
-    } else {
+    }
+    else {
         set_message("Failed to save settings", Tone::Error);
     }
 }
@@ -303,27 +292,26 @@ void AdvancedPanel::change_value(int delta) {
         case Kind::Group:
             item.value = !item.value;
             save_groups();
-            render_all();  // the "boot into server" row may become outdated
+            render_all(); // the "boot into server" row may become outdated
             return;
-        case Kind::Flag:
-            item.value = !item.value;
-            break;
+        case Kind::Flag: item.value = !item.value; break;
         case Kind::Gpu: {
-            auto it = std::find(kGpuValues.begin(), kGpuValues.end(), item.gpu);
-            int index = it == kGpuValues.end() ? 0 : static_cast<int>(it - kGpuValues.begin());
-            const int count = static_cast<int>(kGpuValues.size());
-            index = (index + delta + count) % count;  // wraps: 128 -> 64 -> 32 -> 16 -> 128
-            item.gpu = kGpuValues[static_cast<size_t>(index)];
+            const auto& choices = settings::kGpuChoices;
+            const auto it = std::find(choices.begin(), choices.end(), item.gpu);
+            const auto count = static_cast<std::ptrdiff_t>(choices.size());
+            const auto index = it == choices.end() ? 0 : std::distance(choices.begin(), it);
+            // wraps: 128 -> 64 -> 32 -> 16 -> 128
+            item.gpu = choices[static_cast<size_t>((index + delta + count) % count)];
             break;
         }
         case Kind::Header:
-        case Kind::Reset:
-            return;
+        case Kind::Reset: return;
     }
     render_item(selected_);
-    if (item.kind == Kind::Gpu && item.gpu == 16) {
+    if (item.kind == Kind::Gpu && item.gpu == settings::GpuMemory::Mb16) {
         set_message("16 MB: no camera or hardware video", Tone::Warning);
-    } else {
+    }
+    else {
         set_message(has_boot_changes() ? "Enter: apply and reboot" : "No changes", Tone::Info);
     }
 }
@@ -332,24 +320,30 @@ void AdvancedPanel::change_value(int delta) {
 
 bool AdvancedPanel::key_cb(uint32_t key, void* user_data) {
     auto* panel = static_cast<AdvancedPanel*>(user_data);
-    return panel && panel->on_key(key);
+    if (panel == nullptr) {
+        return false;
+    }
+    panel->on_key(key);
+    return true;
 }
 
-bool AdvancedPanel::on_key(uint32_t key) {
+void AdvancedPanel::on_key(uint32_t key) {
     if (job_.running()) {
-        return true;
+        return;
     }
 
     // password prompt: only typing, Enter (confirm) and Tab (cancel)
     if (prompt_ != Prompt::None) {
         if (key == kKeyTab) {
             cancel_password();
-        } else if (key == LV_KEY_ENTER) {
+        }
+        else if (key == LV_KEY_ENTER) {
             start_job();
-        } else if (edit_password(password_, key)) {
+        }
+        else if (edit_password(password_, key)) {
             update_password_label();
         }
-        return true;
+        return;
     }
 
     // Cardputer arrows sit on ; . , / (Fn layer): accept the plain keys too,
@@ -363,36 +357,27 @@ bool AdvancedPanel::on_key(uint32_t key) {
     }
 
     switch (key) {
-        case kKeyTab:
-            view_model_.show_apple_page();
-            break;
-        case LV_KEY_UP:
-            move_selection(-1);
-            break;
-        case LV_KEY_DOWN:
-            move_selection(1);
-            break;
-        case LV_KEY_LEFT:
-            change_value(-1);
-            break;
-        case LV_KEY_RIGHT:
-            change_value(1);
-            break;
+        case kKeyTab: view_model_.show_apple_page(); break;
+        case LV_KEY_UP: move_selection(-1); break;
+        case LV_KEY_DOWN: move_selection(1); break;
+        case LV_KEY_LEFT: change_value(-1); break;
+        case LV_KEY_RIGHT: change_value(1); break;
         case LV_KEY_ENTER:
-            if (current_.empty()) {
+            if (!status_) {
                 set_message("Boot status unavailable", Tone::Error);
-            } else if (items_[selected_].kind == Kind::Reset) {
+            }
+            else if (items_[selected_].kind == Kind::Reset) {
                 ask_password(Prompt::Reset);
-            } else if (has_boot_changes()) {
+            }
+            else if (has_boot_changes()) {
                 ask_password(Prompt::Apply);
-            } else {
+            }
+            else {
                 set_message("No changes that need a reboot", Tone::Warning);
             }
             break;
-        default:
-            break;  // swallow every other key: no accidental typing while picking options
+        default: break; // swallow every other key: no accidental typing while picking options
     }
-    return true;
 }
 
 // ---- password prompt and the root job
@@ -402,7 +387,8 @@ void AdvancedPanel::update_password_label() {
     if (prompt_ != Prompt::None) {
         set_text_if_changed(password_label_, password_text(password_).c_str());
         lv_obj_set_style_text_color(password_label_, colors.text, 0);
-    } else {
+    }
+    else {
         set_text_if_changed(password_label_, "Enter: apply with reboot");
         lv_obj_set_style_text_color(password_label_, colors.text_disabled, 0);
     }
@@ -428,7 +414,8 @@ void AdvancedPanel::set_busy(bool busy) {
     if (busy) {
         last_elapsed_s_ = UINT32_MAX;
         lv_timer_resume(timer_);
-    } else {
+    }
+    else {
         lv_timer_pause(timer_);
     }
 }
@@ -438,15 +425,16 @@ void AdvancedPanel::start_job() {
         set_message("Enter the sudo password first", Tone::Warning);
         return;
     }
-    std::vector<std::string> argv{settings::script_path("advanced.sh")};
+    std::vector<std::string> argv{settings::script_path(settings::Script::Advanced)};
     if (prompt_ == Prompt::Reset) {
-        argv.push_back("reset");
-    } else {
-        argv.push_back("apply");
+        argv.emplace_back("reset");
+    }
+    else {
+        argv.emplace_back("apply");
         const auto args = changed_args();
         argv.insert(argv.end(), args.begin(), args.end());
     }
-    argv.push_back("--reboot");
+    argv.emplace_back("--reboot");
 
     std::string error;
     const bool started = job_.start(password_, argv, error);
@@ -465,9 +453,8 @@ void AdvancedPanel::tick_cb(lv_timer_t* timer) {
     if (!panel || !panel->job_.running()) {
         return;
     }
-    int exit_code = 0;
-    if (panel->job_.poll(exit_code)) {
-        panel->finish_job(exit_code);
+    if (const auto result = panel->job_.poll()) {
+        panel->finish_job(*result);
         return;
     }
     const uint32_t elapsed = panel->job_.elapsed_s();
@@ -477,29 +464,37 @@ void AdvancedPanel::tick_cb(lv_timer_t* timer) {
     }
 }
 
-void AdvancedPanel::finish_job(int exit_code) {
+void AdvancedPanel::finish_job(const JobResult& result) {
     set_busy(false);
     const auto& output = job_.output();
-    LOG_INFO("advanced finished, exit code {}, output:\n{}", exit_code, output);
-    if (exit_code == 0) {
-        const bool reset = prompt_ == Prompt::Reset;
-        prompt_ = Prompt::None;
-        update_password_label();
-        set_message(reset ? "Reset done. Rebooting…" : "Applied. Rebooting…", Tone::Success);
-        return;
-    }
-    if (SudoJob::wrong_password(output)) {
-        // nothing was changed: keep the user's choices and the prompt
-        set_message("Wrong password · Tab cancel", Tone::Error);
-        return;
+    LOG_INFO("advanced finished, exit code {}, output:\n{}", result.exit_code, output);
+    switch (result.outcome) {
+        case JobOutcome::Success: {
+            const bool reset = prompt_ == Prompt::Reset;
+            prompt_ = Prompt::None;
+            update_password_label();
+            set_message(reset ? "Reset done. Rebooting…" : "Applied. Rebooting…", Tone::Success);
+            return;
+        }
+        case JobOutcome::WrongPassword:
+            // nothing was changed: keep the user's choices and the prompt
+            set_message("Wrong password · Tab cancel", Tone::Error);
+            return;
+        case JobOutcome::Busy:
+        case JobOutcome::PartialFailure:
+        case JobOutcome::BadArguments:
+        case JobOutcome::NotFound:
+        case JobOutcome::Killed:
+        case JobOutcome::OtherError: break;
     }
     // the script may have applied part of the changes: show the real state
     prompt_ = Prompt::None;
     load_status();
     render_all();
     update_password_label();
-    set_message(exit_code == 3 ? "Busy: another switch is running"
-                               : "Error, code " + std::to_string(exit_code) + " (see log)",
+    set_message(result.outcome == JobOutcome::Busy
+                    ? "Busy: another switch is running"
+                    : "Error, code " + std::to_string(result.exit_code) + " (see log)",
                 Tone::Error);
 }
 

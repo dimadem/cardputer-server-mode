@@ -29,6 +29,30 @@ The page names `Apple` and `Butter` come from the template. The app keeps these 
 | `src/platform/linux_input.*` | The evdev key map for characters and arrows, and the key handler of the current screen. |
 | `src/app/app.cpp` | The main loop and the "hold ESC to exit" function. When `busy` is set, ESC has no effect. |
 
+## Types
+
+The code uses `enum class` types and structures for all states and values. It does not use strings or numbers for these values.
+
+| Type | Values | File |
+| --- | --- | --- |
+| `settings::StopGroup` | `Desktop`, `Printing`, `PackageKit`, `Portals`, `Accounts`, `Nfs` | `server_settings.h` |
+| `settings::GroupSet` | A set of `StopGroup` values | `server_settings.h` |
+| `settings::Script` | `ServerMode`, `NormalMode`, `Advanced` | `server_settings.h` |
+| `settings::GpuMemory` | `Mb128`, `Mb64`, `Mb32`, `Mb16` | `server_settings.h` |
+| `settings::BootFlag` | `BootServer`, `CameraOff`, `HdmiOff`, `CloudInitOff` | `server_settings.h` |
+| `settings::BootStatus` | The parsed output of `advanced.sh status` | `server_settings.h` |
+| `screen::JobOutcome` | `Success`, `WrongPassword`, `PartialFailure`, `BadArguments`, `Busy`, `NotFound`, `Killed`, `OtherError` | `sudo_job.h` |
+| `ServerPanel::Mode` | `Normal`, `Server` | `server_panel.h` |
+| `AdvancedPanel::Kind` | `Header`, `Group`, `Gpu`, `Flag`, `Reset` | `advanced_panel.h` |
+| `AdvancedPanel::Prompt` | `None`, `Apply`, `Reset` | `advanced_panel.h` |
+| `screen::Tone` | `Normal`, `Info`, `Success`, `Warning`, `Error` | `panel_common.h` |
+
+Only two locations convert these types to text. `server_settings.cpp` converts the values to the script arguments and parses the script output. `SudoJob::classify` converts the exit code of a script to a `JobOutcome`.
+
+Each `switch` statement on these types has a case for each value. If a case is not there, the `-Wswitch-enum` warning shows it.
+
+The LVGL callbacks use `void* user_data`, because LVGL is a C library. Each callback changes this pointer back to its class in one location only.
+
 ## Keyboard input
 
 The `linux_input` module reads `/dev/input/event*`. It changes evdev codes into characters and arrows, and it uses the Shift state.

@@ -10,6 +10,7 @@
 #include "lvgl.h"
 #include "theme.h"
 
+#include <algorithm>
 #include <cstring>
 #include <string>
 
@@ -18,7 +19,7 @@ namespace screen {
 // Mirrors view::widgets::ToastTone, plus Info.
 enum class Tone { Normal, Info, Success, Warning, Error };
 
-constexpr uint32_t kKeyTab = '\t';  // KEY_TAB as mapped by platform/linux_input.cpp
+constexpr uint32_t kKeyTab = '\t'; // KEY_TAB as mapped by platform/linux_input.cpp
 constexpr size_t kMaxPassword = 64;
 
 inline lv_color_t tone_color(const view::ThemePalette& colors, Tone tone) {
@@ -73,7 +74,7 @@ inline bool edit_password(std::string& password, uint32_t key) {
         return true;
     }
     if (key == LV_KEY_DEL) {
-        for (auto& ch : password) ch = '\0';
+        std::fill(password.begin(), password.end(), '\0');
         password.clear();
         return true;
     }
@@ -87,7 +88,7 @@ inline bool edit_password(std::string& password, uint32_t key) {
 inline std::string password_text(const std::string& password) {
     std::string text = "Password: ";
     text.append(password.size(), '*');
-    text += "_";
+    text += '_';
     return text;
 }
 

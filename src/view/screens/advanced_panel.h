@@ -8,12 +8,14 @@
 #pragma once
 
 #include "panel_common.h"
+#include "server_settings.h"
 #include "sudo_job.h"
 
 #include "lvgl.h"
 
-#include <map>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace app {
@@ -28,7 +30,9 @@ namespace screen {
 
 class AdvancedPanel {
 public:
-    AdvancedPanel(lv_obj_t* content, viewmodel::BaseViewModel& view_model, app::AssetManager& assets);
+    AdvancedPanel(lv_obj_t* content,
+                  viewmodel::BaseViewModel& view_model,
+                  app::AssetManager& assets);
     ~AdvancedPanel();
 
     AdvancedPanel(const AdvancedPanel&) = delete;
@@ -36,26 +40,28 @@ public:
 
 private:
     enum class Kind { Header, Group, Gpu, Flag, Reset };
-    enum class Prompt { None, Apply, Reset };  // what Enter in the password prompt does
+    enum class Prompt { None, Apply, Reset }; // what Enter in the password prompt does
 
+    // One row. Which fields matter depends on kind:
+    // Group uses group + value, Flag uses flag + value, Gpu uses gpu.
     struct Item {
-        Kind kind;
-        std::string title;
-        std::string key;  // group id or advanced.sh key
+        Kind kind{Kind::Header};
+        std::string_view title;
+        settings::StopGroup group{settings::StopGroup::Desktop};
+        settings::BootFlag flag{settings::BootFlag::BootServer};
         bool value{false};
-        int gpu{128};
+        settings::GpuMemory gpu{settings::GpuMemory::Mb128};
         lv_obj_t* row{nullptr};
-        lv_obj_t* label{nullptr};        // name, left
-        lv_obj_t* value_label{nullptr};  // state, right
+        lv_obj_t* label{nullptr};       // name, left
+        lv_obj_t* value_label{nullptr}; // state, right
     };
 
     static void tick_cb(lv_timer_t* timer);
     static bool key_cb(uint32_t key, void* user_data);
 
-    bool on_key(uint32_t key);
+    void on_key(uint32_t key); // takes every key: nothing reaches the template navigation
     void load_status();
-    int status_int(const char* key, int fallback) const;
-    std::string enabled_groups_csv() const;
+    settings::GroupSet enabled_groups() const;
     bool boot_groups_outdated() const;
     bool item_changed(const Item& item) const;
     bool has_boot_changes() const;
@@ -69,7 +75,7 @@ private:
     void ask_password(Prompt prompt);
     void cancel_password();
     void start_job();
-    void finish_job(int exit_code);
+    void finish_job(const JobResult& result);
     void set_message(const std::string& text, Tone tone);
     void update_password_label();
     void set_busy(bool busy);
@@ -79,11 +85,11 @@ private:
     lv_obj_t* list_{nullptr};
     lv_obj_t* password_label_{nullptr};
     lv_obj_t* message_label_{nullptr};
-    lv_timer_t* timer_{nullptr};  // runs only while a job runs
+    lv_timer_t* timer_{nullptr}; // runs only while a job runs
 
     std::vector<Item> items_;
     size_t selected_{0};
-    std::map<std::string, std::string> current_;  // "advanced.sh status": empty if unavailable
+    std::optional<settings::BootStatus> status_; // "advanced.sh status": nullopt if unavailable
     std::string password_;
     SudoJob job_;
     Prompt prompt_{Prompt::None};

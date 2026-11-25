@@ -4,6 +4,7 @@
 # Nothing is uninstalled or disabled; reboot or normal-mode.sh brings everything back.
 # Exit: 0 ok, 1 some unit failed to stop (state kept so normal-mode.sh can restore), 2 bad args, 3 busy.
 set -u
+# shellcheck source=common.sh
 . "$(dirname "$(readlink -f "$0")")/common.sh"
 need_root
 
@@ -34,8 +35,10 @@ case " $groups " in *" portals "*)
 esac
 
 # state is written (atomically) before anything is stopped
-printf '%s\n' $units > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE" \
-  || { echo "cannot write $STATE_FILE" >&2; rm -f "$STATE_FILE.tmp"; exit 1; }
+# shellcheck disable=SC2086  # $units is a word list: one unit per line
+if ! { printf '%s\n' $units > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"; }; then
+  echo "cannot write $STATE_FILE" >&2; rm -f "$STATE_FILE.tmp"; exit 1
+fi
 
 failed=0
 for u in $units; do

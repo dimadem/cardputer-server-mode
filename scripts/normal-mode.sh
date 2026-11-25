@@ -2,6 +2,7 @@
 # Return from server mode: start again exactly what server-mode.sh stopped.
 # Exit: 0 ok, 1 some unit failed to start (those stay in the state file for a retry), 3 busy.
 set -u
+# shellcheck source=common.sh
 . "$(dirname "$(readlink -f "$0")")/common.sh"
 need_root
 
@@ -17,6 +18,7 @@ for u in $(tac "$STATE_FILE"); do
 done
 
 if [ -n "$failed_units" ]; then
+  # shellcheck disable=SC2086  # word list: one unit per line
   printf '%s\n' $failed_units > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
   echo "normal mode incomplete, failed:$failed_units" >&2
   exit 1
