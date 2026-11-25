@@ -1,31 +1,33 @@
-# Опции с перезагрузкой (advanced.sh)
+# Boot options (advanced.sh)
 
 ```
-advanced.sh status                         # текущие значения, root не нужен
-advanced.sh apply key=value... [--reboot]  # применить
-advanced.sh reset [--reboot]               # вернуть исходное
+advanced.sh status                         # current values, root access is not necessary
+advanced.sh apply key=value... [--reboot]  # apply the values
+advanced.sh reset [--reboot]               # go back to the original files
 ```
 
-## Ключи
+## Keys
 
-| Ключ | Значения | Что меняется |
+| Key | Values | Change |
 | --- | --- | --- |
-| `gpu` | 16, 32, 64, 128 | строка `gpu_mem=` в `/boot/firmware/config.txt` |
-| `camera_off` | 0/1 | `dtoverlay=imx219` комментируется как `#cz-off dtoverlay=imx219` |
-| `hdmi_off` | 0/1 | в `/boot/firmware/cmdline.txt` добавляется `video=HDMI-A-1:d` |
-| `cloudinit_off` | 0/1 | создаётся `/etc/cloud/cloud-init.disabled` |
-| `boot_server` | 0/1 | служба `cz-server-mode-boot.service` и цель загрузки по умолчанию |
-| `groups` | `a,b,c` | какие группы останавливает служба загрузки |
+| `gpu` | 16, 32, 64, 128 | The `gpu_mem=` line in `/boot/firmware/config.txt` |
+| `camera_off` | 0/1 | The script changes `dtoverlay=imx219` into the comment `#cz-off dtoverlay=imx219` |
+| `hdmi_off` | 0/1 | The script adds `video=HDMI-A-1:d` to `/boot/firmware/cmdline.txt` |
+| `cloudinit_off` | 0/1 | The script makes the file `/etc/cloud/cloud-init.disabled` |
+| `boot_server` | 0/1 | The `cz-server-mode-boot.service` unit and the default boot target |
+| `groups` | `a,b,c` | The groups that the boot service stops |
 
-Программа передаёт только изменённые ключи. Если включена загрузка в режим сервера, она передаёт ещё и `groups=`.
+The app sends only the changed keys. When "Boot into server mode" is on, the app also sends `groups=`.
 
-### Видеопамять
+### GPU memory
 
-`gpu_mem=16` — это минимум для Raspberry Pi (8 МБ невозможно). При 16 МБ не работают камера и аппаратное видео (кодеки), программа об этом предупреждает. Экран CardputerZero и консоль работают. Освобождённая память видна системе после перезагрузки: всего становится ~462 МБ вместо ~352.
+On a Raspberry Pi, the minimum value of `gpu_mem` is 16. A value of 8 is not possible. With 16 MB, the camera and the hardware video codecs do not operate, and the app shows a message about this. The CardputerZero screen and the console operate correctly.
 
-### Загрузка в режим сервера
+The system gets the memory after the reboot. The total memory increases from approximately 352 MB to approximately 462 MB.
 
-При `boot_server=1` создаётся служба:
+### Boot into server mode
+
+When `boot_server=1`, the script makes this unit:
 
 ```ini
 [Unit]
@@ -34,31 +36,37 @@ After=network.target cups.service accounts-daemon.service rpcbind.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/lib/cz-server-mode/server-mode.sh --boot <группы>
+ExecStart=/usr/lib/cz-server-mode/server-mode.sh --boot <groups>
 RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-Кроме того, цель по умолчанию переключается на `multi-user.target`, так что рабочий стол вообще не стартует. При `boot_server=0` служба удаляется и цель возвращается на `graphical.target`. Это делается только если служба была, чтобы не трогать чужую настройку.
+The script also sets the default target to `multi-user.target`. Thus, the desktop does not start at boot.
 
-## Безопасность изменений
+When `boot_server=0`, the script removes the unit and sets the default target to `graphical.target`. The script does this only if the unit is there. Thus, it does not change a default target that a different person or program set.
 
-- При первом `apply` сохраняются копии `config.txt.cz-orig` и `cmdline.txt.cz-orig`.
-- Изменения делаются на рабочих копиях `*.cz-new` и записываются, только если файл действительно изменился (`cmp`).
-- Запись атомарная: копия во временный файл → `sync` → `mv` → `sync`. При отключении питания файл будет либо старым, либо новым целиком, но не обрезанным.
-- Перед дописыванием `gpu_mem=` проверяется, что файл заканчивается переводом строки.
+## Safe changes
 
-## Сброс
+The script has these protections for the boot files:
 
-`reset` восстанавливает оба файла из `*.cz-orig` и удаляет копии только после того, как оба восстановлены. Затем удаляет службу загрузки, возвращает `graphical.target` и снова включает cloud-init.
+- At the first `apply`, the script makes the copies `config.txt.cz-orig` and `cmdline.txt.cz-orig`.
+- The script changes the work copies `*.cz-new`. It writes a work copy to the boot file only if the content is different (`cmp`).
+- Each write is atomic: copy to a temporary file, `sync`, `mv`, `sync`. If the power goes off, the file is the old file or the full new file.
+- Before the script adds `gpu_mem=`, it makes sure that the file ends with a newline.
 
-## Перезагрузка
+## Reset
 
-`--reboot` перезагружает плату через 3 секунды (`systemd-run --on-active=3 systemctl reboot`), чтобы программа успела показать результат. Перед этим в `/run` (только на эту перезагрузку) ставится drop-in `TimeoutStopSec=2` для user-службы `mpris-proxy`: она игнорирует SIGTERM и иначе задерживает выключение на 90 секунд.
+The `reset` command copies the two files back from `*.cz-orig`. The script removes the copies only after it restores the two files. Then it removes the boot service, sets `graphical.target` and enables cloud-init again.
 
-## Вывод status
+## Reboot
+
+With `--reboot`, the board reboots after 3 seconds (`systemd-run --on-active=3 systemctl reboot`). During these 3 seconds, the app shows the result.
+
+The `mpris-proxy` user service ignores SIGTERM. It can stop the shutdown for 90 seconds. Before the reboot, the script puts a drop-in with `TimeoutStopSec=2` for this service in `/run`. This drop-in has an effect only for this reboot.
+
+## Status output
 
 ```
 gpu=16 boot_server=1 camera_off=1 hdmi_off=1 cloudinit_off=1 modified=1 boot_groups=desktop,printing,packagekit,portals,accounts,nfs

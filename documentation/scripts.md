@@ -1,69 +1,76 @@
-# Скрипты режима сервера
+# Server mode scripts
 
-Скрипты лежат в `scripts/` и устанавливаются в `/usr/lib/cz-server-mode/`. Этот путь зашит в программу при сборке (`CZ_SCRIPT_DIR`). Все скрипты, кроме `advanced.sh status`, требуют root. Программа запускает их через `sudo`, но их можно вызывать и вручную по ssh.
+The scripts are in `scripts/`. The installation puts them in `/usr/lib/cz-server-mode/`. The build writes this path into the app (`CZ_SCRIPT_DIR`).
+
+All scripts must have root access, but `advanced.sh status` does not. The app starts the scripts with `sudo`. You can also start them manually through ssh.
 
 ## common.sh
 
-Общие настройки, подключается остальными скриптами.
+The `common.sh` file contains the shared values and functions. The other scripts read it.
 
-### Группы служб
+### Service groups
 
-| Группа | Системные юниты | Комментарий |
+| Group | System units | Comment |
 | --- | --- | --- |
-| `desktop` | `lightdm.service`, `wayvnc-control.service` | весь рабочий стол Raspberry Pi и вывод на HDMI |
-| `printing` | `cups.service`, `cups-browsed.service`, `cups.socket`, `cups.path` | печать |
-| `packagekit` | `packagekit.service` | фоновые обновления; запускается по требованию через D-Bus |
-| `portals` | (user-юниты) | `xdg-desktop-portal*`, `xdg-document-portal`, `xdg-permission-store`, `gvfs-*` |
+| `desktop` | `lightdm.service`, `wayvnc-control.service` | The full Raspberry Pi desktop and the HDMI output |
+| `printing` | `cups.service`, `cups-browsed.service`, `cups.socket`, `cups.path` | Printers |
+| `packagekit` | `packagekit.service` | Background updates. D-Bus starts it when necessary. |
+| `portals` | User units | `xdg-desktop-portal*`, `xdg-document-portal`, `xdg-permission-store`, `gvfs-*` |
 | `accounts` | `accounts-daemon.service` | |
 | `nfs` | `rpcbind.service`, `rpcbind.socket`, `nfs-blkmap.service` | |
 
-Список групп продублирован в `src/view/screens/server_settings.cpp` (`stop_groups()`), и оба места нужно менять вместе.
+The list of groups is also in `src/view/screens/server_settings.cpp` (`stop_groups()`). When you change the list, change the two files.
 
-### Функции
+### Functions
 
-- `need_root`: завершает скрипт, если запущен не от root.
-- `take_lock`: `flock -n` на `/run/cz-server-mode.lock`. Если переключение уже идёт, скрипт выходит с кодом 3. Блокировку берут программа, служба загрузки и ручные вызовы.
-- `target_user`: пользователь, для которого останавливать user-юниты: `SUDO_USER`, а если его нет, владелец процесса APPLaunch.
-- `user_systemctl`: `systemctl --user` от имени этого пользователя через `runuser` с нужными `XDG_RUNTIME_DIR` и `DBUS_SESSION_BUS_ADDRESS`.
-- `mem_avail_mb`: `MemAvailable` в МБ.
+- `need_root`: Stops the script if the user is not root.
+- `take_lock`: Gets a `flock -n` lock on `/run/cz-server-mode.lock`. If a different switch has the lock, the script stops with exit code 3. The app, the boot service and manual commands use the same lock.
+- `target_user`: Gives the user for the user units. This is `SUDO_USER`. If `SUDO_USER` is empty, it is the owner of the APPLaunch process.
+- `user_systemctl`: Starts `systemctl --user` as this user through `runuser`, with the correct `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS`.
+- `mem_avail_mb`: Gives `MemAvailable` in MB.
 
 ## server-mode.sh
 
 ```
-server-mode.sh [--boot] [группа...]     # без групп останавливаются все
+server-mode.sh [--boot] [group...]     # with no groups, the script stops all groups
 ```
 
-1. Проверяет имена групп (неизвестная группа → код 2).
-2. Берёт блокировку. Если файл состояния уже есть, выводит «already in server mode» и выходит с кодом 0.
-3. Собирает список **активных** юнитов выбранных групп. С флагом `--boot` (запуск из службы загрузки) `lightdm` записывается, даже если он ещё не запущен, чтобы обратное переключение подняло рабочий стол.
-4. **Сначала** атомарно (tmp + mv) записывает список в `/run/cz-server-mode/stopped-units`, потом останавливает юниты. Если что-то упадёт посередине, `normal-mode.sh` всё равно знает, что поднимать.
-5. Останавливает user-юниты группы `portals`.
-6. Печатает `MemAvailable: до -> после`. Эту строку программа показывает как результат.
+The script does these steps:
+
+1. It examines the group names. If a group name is not known, the script stops with exit code 2.
+2. It gets the lock. If the state file is there, it writes "already in server mode" and stops with exit code 0.
+3. It makes a list of the **active** units of the selected groups. With `--boot`, it adds `lightdm` to the list also when `lightdm` did not start. Thus, `normal-mode.sh` can start the desktop later.
+4. It writes the list to `/run/cz-server-mode/stopped-units` before it stops a unit. The write is atomic (a temporary file and `mv`). If the script stops during the switch, `normal-mode.sh` can find the units.
+5. It stops the units.
+6. It stops the user units of the `portals` group.
+7. It writes `MemAvailable: before -> after`. The app shows this line as the result.
 
 ## normal-mode.sh
 
-1. Берёт блокировку. Если файла состояния нет, выводит «already in normal mode» и выходит с кодом 0.
-2. Запускает юниты из файла состояния в обратном порядке, так что `lightdm` поднимается последним.
-3. `packagekit.service` и user-юниты вручную не запускаются: они стартуют сами по D-Bus, когда нужны. Ручной запуск порталов раньше давал зависание на 2 минуты.
-4. Если какой-то юнит не запустился, в файле состояния остаются только неудавшиеся (для повтора), и скрипт выходит с кодом 1.
+The script does these steps:
 
-## Коды выхода
+1. It gets the lock. If the state file is not there, it writes "already in normal mode" and stops with exit code 0.
+2. It starts the units from the state file in the reverse sequence. Thus, `lightdm` starts last.
+3. It does not start `packagekit.service` and the user units. D-Bus starts them when necessary. A manual start of the portals caused a delay of 2 minutes.
+4. If a unit does not start, the state file keeps only the units that did not start. Then the script stops with exit code 1. You can do the switch again.
 
-| Код | Значение | Что показывает программа |
+## Exit codes
+
+| Code | Meaning | App message |
 | --- | --- | --- |
-| 0 | успех (или уже в этом режиме) | Done / Already in this mode |
-| 1 | часть юнитов не остановилась или не запустилась | Partly failed, code 1 (see log) |
-| 2 | неверные аргументы | Partly failed, code 2 |
-| 3 | занято: идёт другое переключение | Busy: another switch is running |
-| 127 | не найден sudo или скрипт | sudo or script not found |
+| 0 | Success, or the board is in this mode at this time | `Done`, `Already in this mode` |
+| 1 | One or more units did not stop or start | `Partly failed, code 1 (see log)` |
+| 2 | An argument is not correct | `Partly failed, code 2` |
+| 3 | A different switch has the lock | `Busy: another switch is running` |
+| 127 | The system cannot find sudo or the script | `sudo or script not found` |
 
-Неверный пароль определяется по выводу sudo, а не по коду.
+The app finds an incorrect password from the output of sudo, not from the exit code.
 
-## Ручной вызов по ssh
+## Manual commands through ssh
 
 ```shell
-sudo /usr/lib/cz-server-mode/server-mode.sh              # все группы
-sudo /usr/lib/cz-server-mode/server-mode.sh desktop nfs  # только эти
+sudo /usr/lib/cz-server-mode/server-mode.sh              # all groups
+sudo /usr/lib/cz-server-mode/server-mode.sh desktop nfs  # only these groups
 sudo /usr/lib/cz-server-mode/normal-mode.sh
-cat /run/cz-server-mode/stopped-units                    # что сейчас остановлено
+cat /run/cz-server-mode/stopped-units                    # the units that are stopped now
 ```

@@ -1,10 +1,10 @@
-# Документация Server Mode
+# Server Mode documentation
 
-| Файл | О чём |
+| File | Content |
 | --- | --- |
-| [overview.md](overview.md) | Что делает программа, экраны, клавиши, типичные сценарии |
-| [architecture.md](architecture.md) | Устройство кода: слои, классы, поток данных, запуск root-скриптов |
-| [scripts.md](scripts.md) | Скрипты `server-mode.sh`, `normal-mode.sh`, `common.sh`: группы служб, состояние, блокировка, коды выхода |
-| [boot-options.md](boot-options.md) | `advanced.sh`: опции с перезагрузкой, какие файлы меняются, как всё откатывается |
-| [build-and-install.md](build-and-install.md) | Сборка на плате, установка, dev-ярлык, .deb |
-| [troubleshooting.md](troubleshooting.md) | Известные проблемы и ручное восстановление |
+| [`overview.md`](overview.md) | The function of the app, the pages, the keys and a typical procedure |
+| [`architecture.md`](architecture.md) | The code structure: layers, classes, data flow and the root scripts |
+| [`scripts.md`](scripts.md) | The `server-mode.sh`, `normal-mode.sh` and `common.sh` scripts: service groups, state, lock and exit codes |
+| [`boot-options.md`](boot-options.md) | The `advanced.sh` script: boot options, the files that it changes and the reset |
+| [`build-and-install.md`](build-and-install.md) | Build on the board, installation, the development shortcut and the Debian package |
+| [`troubleshooting.md`](troubleshooting.md) | Known problems and manual recovery |

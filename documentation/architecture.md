@@ -1,73 +1,79 @@
-# Архитектура
+# Architecture
 
-Программа построена на шаблоне [CardputerZero/Template](https://github.com/CardputerZero/Template): C++17, LVGL 9.5, CMake, MVVM. Структура и стиль шаблона сохранены, новый код лежит в основном в `src/view/screens/` и `scripts/`.
+The app uses the [CardputerZero/Template](https://github.com/CardputerZero/Template) project: C++17, LVGL 9.5, CMake and the MVVM pattern. The app keeps the structure and the style of the template. Most of the new code is in `src/view/screens/` and `scripts/`.
 
-## Слои
+## Layers
 
 ```
-main.cpp → app::App (жизненный цикл, главный цикл LVGL, ESC-выход, тосты)
-             ├─ model::BaseModel           состояние: текущая страница, тема
-             ├─ viewmodel::BaseViewModel   субъекты LVGL, действия, флаг busy
-             ├─ app::ScreenManager         пересоздаёт экран при смене страницы
-             │    ├─ AppleScreen  → ServerPanel    (главный экран)
-             │    └─ ButterScreen → AdvancedPanel  (настройки)
-             └─ platform::linux_input      evdev-клавиатура → LVGL keypad
+main.cpp → app::App (life cycle, LVGL main loop, ESC exit, toasts)
+             ├─ model::BaseModel           state: current page, theme
+             ├─ viewmodel::BaseViewModel   LVGL subjects, actions, busy flag
+             ├─ app::ScreenManager         makes a new screen when the page changes
+             │    ├─ AppleScreen  → ServerPanel    (main page)
+             │    └─ ButterScreen → AdvancedPanel  (Settings page)
+             └─ platform::linux_input      evdev keyboard → LVGL keypad
 ```
 
-Имена страниц `Apple`/`Butter` достались от шаблона и не переименовывались, чтобы не расходиться с ним.
+The page names `Apple` and `Butter` come from the template. The app keeps these names, so that the code stays near to the template.
 
-## Файлы приложения
+## Files of the app
 
-| Файл | Назначение |
+| File | Function |
 | --- | --- |
-| `src/view/screens/server_panel.*` | Главный экран: чтение `/proc/meminfo`, проверка, запущен ли рабочий стол (PID labwc кэшируется, полный обход `/proc` не чаще раза в 10 с), ввод пароля, запуск переключения |
-| `src/view/screens/advanced_panel.*` | Настройки: список строк (`Kind::Header/Group/Flag/Gpu/Reset`), чтение `advanced.sh status`, вычисление изменённых пунктов, окно пароля (`Prompt::None/Apply/Reset`) |
-| `src/view/screens/server_settings.*` | Список групп служб (`stop_groups()`), чтение и запись `~/.config/cz-server-mode/stop-groups`, путь к скриптам |
-| `src/view/screens/sudo_job.*` | Запуск `sudo -S -k` в дочернем процессе с неблокирующим чтением вывода |
-| `src/view/screens/panel_common.h` | Общие мелочи: цвета статусов (`Tone`), метки, редактирование пароля |
-| `src/view/widgets/help_popup.cpp` | Справка Fn+H для обеих страниц |
-| `src/platform/linux_input.*` | Раскладка evdev → символы и стрелки, обработчик клавиш текущего экрана |
-| `src/app/app.cpp` | Главный цикл, удержание ESC для выхода (блокируется, пока `busy`) |
+| `src/view/screens/server_panel.*` | The main page. It reads `/proc/meminfo`, finds the desktop process, reads the password and starts the switch. The page keeps the PID of labwc and reads all of `/proc` a maximum of one time in 10 seconds. |
+| `src/view/screens/advanced_panel.*` | The Settings page. It has the list of rows (`Kind::Header/Group/Flag/Gpu/Reset`), reads `advanced.sh status`, finds the changed items and shows the password prompt (`Prompt::None/Apply/Reset`). |
+| `src/view/screens/server_settings.*` | The list of service groups (`stop_groups()`), the file `~/.config/cz-server-mode/stop-groups` and the path of the scripts. |
+| `src/view/screens/sudo_job.*` | Starts `sudo -S -k` in a child process and reads its output without a block. |
+| `src/view/screens/panel_common.h` | Shared helpers: status colors (`Tone`), labels and password edit. |
+| `src/view/widgets/help_popup.cpp` | The Fn+H help for the two pages. |
+| `src/platform/linux_input.*` | The evdev key map for characters and arrows, and the key handler of the current screen. |
+| `src/app/app.cpp` | The main loop and the "hold ESC to exit" function. When `busy` is set, ESC has no effect. |
 
-## Ввод с клавиатуры
+## Keyboard input
 
-`linux_input` читает `/dev/input/event*` и переводит коды evdev в символы, учитывая Shift. Экран регистрирует свой обработчик через `set_screen_key_handler`, и этот обработчик получает клавишу раньше навигации шаблона. Поэтому пароль печатается прямо в панель, а на экране настроек обычные клавиши не попадают никуда, кроме окна пароля.
+The `linux_input` module reads `/dev/input/event*`. It changes evdev codes into characters and arrows, and it uses the Shift state.
 
-Отпускание клавиши сопоставляется с той, что была выдана при нажатии (`pressed_keys`), чтобы смена Shift или Fn между нажатием и отпусканием не оставляла «залипших» клавиш.
+Each screen sets a key handler with `set_screen_key_handler`. This handler gets each key before the navigation of the template. Thus, the password goes directly to the panel. On the Settings page, normal keys go only to the password prompt.
 
-## Запуск root-скриптов (SudoJob)
+For each key release, the module sends the key that it sent for the key press (`pressed_keys`). Thus, a change of Shift or Fn between the press and the release does not leave a key in the pressed state.
+
+## Root scripts (SudoJob)
 
 ```
-UI-поток                         дочерний процесс
+UI thread                        child process
 SudoJob::start(password, argv)
   pipe2(O_CLOEXEC) ×2
   fork ───────────────────────→ LC_ALL=C
                                  execv /usr/bin/sudo -S -k -p "" <script> <args>
   write(password + "\n") → stdin
   wipe(password)
-таймер LVGL (200 мс):
-  poll() → читает stdout/stderr (неблокирующе)
+LVGL timer (200 ms):
+  poll() → reads stdout/stderr (no block)
   waitpid(WNOHANG) → exit code
 ```
 
-- Пароль передаётся только через stdin, его нет ни в argv, ни в окружении. После записи буфер затирается.
-- `-k` заставляет sudo каждый раз спрашивать пароль и не использовать кэш.
-- `LC_ALL=C` нужен, чтобы сообщение sudo о неверном пароле было на английском и его можно было распознать (`SudoJob::wrong_password`).
-- Деструктор ждёт завершения процесса, поэтому зомби не остаётся.
-- Пока задача идёт, `BaseViewModel::busy()` равен true: удержание ESC не закрывает программу, клавиши игнорируются.
+The SudoJob class has these properties:
 
-## Главный цикл
+- The password goes only to stdin. It is not in argv or in the environment. After the write, the app erases the buffer.
+- With `-k`, sudo does not use its cache and reads the password each time.
+- With `LC_ALL=C`, sudo writes its "wrong password" message in English. Thus, `SudoJob::wrong_password` can find it.
+- The destructor waits for the child process. Thus, no zombie process stays.
+- During a job, `BaseViewModel::busy()` gives `true`. ESC does not close the app, and the app ignores the keys.
 
-`lv_timer_handler()` возвращает время до следующего таймера, и цикл спит столько же, но не больше 30 мс. Таймеры панелей работают с периодом 2 с в простое и 200 мс во время задачи, а таймер настроек в простое приостановлен. Так программа почти не тратит CPU, пока просто открыта.
+## Main loop
 
-## Где хранятся данные
+The `lv_timer_handler()` function gives the time until the next timer. The loop sleeps for this time, for a maximum of 30 ms.
 
-| Что | Где |
+The panel timers have a period of 2 seconds when the app is idle, and 200 ms during a job. The timer of the Settings page stops when the app is idle. Thus, an open app uses almost no CPU time.
+
+## Data locations
+
+| Data | Location |
 | --- | --- |
-| Тема (системная) | `/etc/cz-server-mode.conf` |
-| Тема (пользователь) | `~/.config/cz-server-mode/cz-server-mode.conf` |
-| Выбранные группы | `~/.config/cz-server-mode/stop-groups` (если файла нет, включены все) |
-| Что остановлено сейчас | `/run/cz-server-mode/stopped-units` (tmpfs, исчезает при перезагрузке) |
-| Блокировка | `/run/cz-server-mode.lock` |
-| Копии загрузочных файлов | `/boot/firmware/config.txt.cz-orig`, `cmdline.txt.cz-orig` |
-| Служба загрузки в режим сервера | `/etc/systemd/system/cz-server-mode-boot.service` |
+| Theme (system) | `/etc/cz-server-mode.conf` |
+| Theme (user) | `~/.config/cz-server-mode/cz-server-mode.conf` |
+| Selected groups | `~/.config/cz-server-mode/stop-groups`. If this file is not there, the app selects all groups. |
+| Units that server mode stopped | `/run/cz-server-mode/stopped-units` (tmpfs, a reboot erases it) |
+| Lock | `/run/cz-server-mode.lock` |
+| Copies of the boot files | `/boot/firmware/config.txt.cz-orig`, `cmdline.txt.cz-orig` |
+| Boot service for server mode | `/etc/systemd/system/cz-server-mode-boot.service` |

@@ -1,35 +1,37 @@
-# Известные проблемы и восстановление
+# Known problems and recovery
 
-## Перезагрузка «ничего не делает»
+## The reboot does not start
 
-На самом деле перезагрузка идёт, просто долго: user-служба `mpris-proxy` (Bluetooth) задерживает выключение на 90 секунд. `advanced.sh` ставит drop-in с таймаутом 2 с перед своей перезагрузкой. При ручном `reboot` задержка может остаться.
+The reboot starts, but it is slow. The `mpris-proxy` user service (Bluetooth) can stop the shutdown for 90 seconds. Before its reboot, `advanced.sh` puts a drop-in with a 2-second timeout for this service. After a manual `reboot` command, the delay can occur.
 
-## Рабочий стол не возвращается после загрузки в режим сервера
+## The desktop does not start after a boot into server mode
 
-В режиме загрузки `multi-user` мастер первой настройки Raspberry Pi OS (`userconfig.service`) может ждать ввода на tty8, и тогда `lightdm` не стартует. Если первичная настройка уже пройдена, мастер можно отключить:
+In the `multi-user` boot target, the Raspberry Pi OS first-boot wizard (`userconfig.service`) can wait for input on tty8. Then `lightdm` does not start.
+
+If you did the first-boot configuration before, you can disable the wizard:
 
 ```shell
 sudo systemctl disable --now userconfig.service
 ```
 
-## Не отключайте Bluetooth
+## Do not stop Bluetooth
 
-Лаунчер APPLaunch постоянно опрашивает bluez. Без Bluetooth он раз в 2 секунды пишет ошибки в журнал, поэтому Server Mode Bluetooth не трогает.
+The APPLaunch launcher reads data from bluez all the time. If Bluetooth stops, the launcher writes errors to the log every 2 seconds. Thus, Server Mode does not stop Bluetooth.
 
-## «Busy: another switch is running»
+## "Busy: another switch is running"
 
-Другое переключение уже идёт (из программы, службы загрузки или ssh). Если вы уверены, что ничего не запущено, блокировка освобождается сама: это `flock`, и он снимается вместе с процессом.
+A different switch is in progress. The app, the boot service or an ssh command can start a switch. The lock is a `flock` lock. Thus, the lock goes away when its process stops.
 
-## Ручное восстановление
+## Manual recovery
 
-Вернуть всё по ssh без программы:
+To go back to the default configuration through ssh without the app, use these commands:
 
 ```shell
-sudo /usr/lib/cz-server-mode/normal-mode.sh            # поднять остановленные службы
-sudo /usr/lib/cz-server-mode/advanced.sh reset --reboot # вернуть загрузочные файлы
+sudo /usr/lib/cz-server-mode/normal-mode.sh             # start the stopped services
+sudo /usr/lib/cz-server-mode/advanced.sh reset --reboot # restore the boot files
 ```
 
-Если скриптов нет, то же самое вручную:
+If the scripts are not on the board, do these steps manually:
 
 ```shell
 sudo cp /boot/firmware/config.txt.cz-orig /boot/firmware/config.txt
@@ -40,13 +42,13 @@ sudo systemctl set-default graphical.target
 sudo reboot
 ```
 
-Если плата не загружается после изменения `config.txt`, вставьте карту в компьютер и восстановите файлы из `*.cz-orig` в разделе `bootfs`.
+If the board does not start after a change to `config.txt`, put the SD card in a computer. Then copy the `*.cz-orig` files back on the `bootfs` partition.
 
-## Журнал программы
+## App log
 
-Программа пишет сообщения с тегом `server-mode`, вместе с выводом скриптов, в stdout. Если программа запущена из лаунчера, этот вывод попадает в журнал user-службы APPLaunch:
+The app writes its messages and the output of the scripts to stdout, with the `server-mode` tag. When you start the app from the launcher, this output goes to the journal of the APPLaunch user service:
 
 ```shell
 journalctl --user -u APPLaunch -n 200 | grep server-mode
-journalctl -u cz-server-mode-boot.service -b    # служба загрузки
+journalctl -u cz-server-mode-boot.service -b    # the boot service
 ```

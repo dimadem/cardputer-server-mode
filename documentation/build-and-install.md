@@ -1,25 +1,37 @@
-# Сборка и установка
+# Build and installation
 
-## Сборка на плате
+## Build on the board
 
-Удобнее всего собирать прямо на CardputerZero: пресет `cp0-device` использует работающую систему как sysroot (`CM0_SDK_ROOT=/`).
+The easiest procedure is to build the app on the CardputerZero. The `cp0-device` preset uses the system of the board as the sysroot (`CM0_SDK_ROOT=/`).
 
-```shell
-sudo apt install -y build-essential cmake ninja-build libpng-dev libjpeg-dev libfmt-dev libfreetype-dev zlib1g-dev
-cmake --preset cp0-device
-cmake --build --preset cp0-device-rel -j2
-```
+1. Install the build packages:
 
-Первая сборка (вместе с LVGL) идёт долго, повторная занимает 1–2 минуты. Бинарник: `build/cp0-native/Release/cz_server_mode`.
+   ```shell
+   sudo apt install -y build-essential cmake ninja-build libpng-dev libjpeg-dev libfmt-dev libfreetype-dev zlib1g-dev
+   ```
 
-Синхронизация с компьютера:
+2. Configure the build:
+
+   ```shell
+   cmake --preset cp0-device
+   ```
+
+3. Build the app:
+
+   ```shell
+   cmake --build --preset cp0-device-rel -j2
+   ```
+
+The first build also builds LVGL and takes a long time. The next builds take 1 to 2 minutes. The binary file is `build/cp0-native/Release/cz_server_mode`.
+
+To copy the source from a computer and build it on the board, use these commands:
 
 ```shell
 rsync -a --exclude build ./ <user>@<board>.local:cz-server-mode/
 ssh <user>@<board>.local 'cd cz-server-mode && cmake --build --preset cp0-device-rel -j2'
 ```
 
-## Установка скриптов
+## Install the scripts
 
 ```shell
 sudo install -d /usr/lib/cz-server-mode
@@ -27,9 +39,9 @@ sudo install -m 755 scripts/server-mode.sh scripts/normal-mode.sh scripts/advanc
 sudo install -m 644 scripts/common.sh /usr/lib/cz-server-mode/
 ```
 
-## Dev-ярлык в лаунчере
+## Development shortcut in the launcher
 
-Чтобы запускать собранный бинарник из APPLaunch без пакета, создайте `/usr/share/APPLaunch/applications/zz-server-mode-dev.desktop`:
+You can start the binary file from APPLaunch without a package. To do this, make the file `/usr/share/APPLaunch/applications/zz-server-mode-dev.desktop`:
 
 ```ini
 [Desktop Entry]
@@ -40,34 +52,38 @@ Terminal=false
 Type=Application
 ```
 
-После пересборки достаточно снова запустить приложение из лаунчера.
+After each build, start the app again from the launcher.
 
-## Debian-пакет
+## Debian package
 
-Пакет собирается с помощью CPack (настройки в `cmake/cm0-package.cmake`):
+CPack makes the package. The configuration is in `cmake/cm0-package.cmake`.
 
-| Путь | Содержимое |
+| Path | Content |
 | --- | --- |
-| `/usr/bin/cz_server_mode` | программа |
+| `/usr/bin/cz_server_mode` | The app |
 | `/usr/lib/cz-server-mode/` | `server-mode.sh`, `normal-mode.sh`, `advanced.sh`, `common.sh` |
-| `/etc/cz-server-mode.conf` | настройки по умолчанию (`dark_mode=yes`) |
-| `/usr/share/APPLaunch/applications/cz_server_mode.desktop` | ярлык лаунчера «Server Mode» |
-| `/usr/share/APPLaunch/share/images/cz_server_mode*.png` | иконка |
+| `/etc/cz-server-mode.conf` | The default configuration (`dark_mode=yes`) |
+| `/usr/share/APPLaunch/applications/cz_server_mode.desktop` | The "Server Mode" launcher entry |
+| `/usr/share/APPLaunch/share/images/cz_server_mode*.png` | The icon |
 
-Зависимости: `sudo, util-linux, procps`. Системная служба не ставится (`APP_INSTALL_SYSTEMD_SERVICE OFF`): правила магазина CardputerZero запрещают пакетам приложений ставить root-службы. Служба загрузки в режим сервера создаётся только по явному выбору пользователя в настройках.
+The package depends on `sudo`, `util-linux` and `procps`. The package does not install a system service (`APP_INSTALL_SYSTEMD_SERVICE OFF`). The rules of the CardputerZero Store do not let an app package install a root service. The app makes the boot service only when the user selects "Boot into server mode".
 
-Кросс-сборка с компьютера (из шаблона):
+To build the package on a computer (cross build from the template), use this command:
 
 ```shell
-cmake --workflow --preset cp0-cross-package   # → dist/ServerMode_<версия>_<ревизия>_arm64.deb
+cmake --workflow --preset cp0-cross-package   # → dist/ServerMode_<version>_<revision>_arm64.deb
 ```
 
-Установка на плате:
+To install the package on the board, use this command:
 
 ```shell
 sudo apt install --no-install-recommends ./ServerMode_0.1.0_rev1_arm64.deb
 ```
 
-## Публикация в CardputerZero Store
+## Publication in the CardputerZero Store
 
-Нужно заполнить раздел `store` в `app-builder.json` (сейчас там значения шаблона), сделать свою иконку и скриншоты и отправить PR в репозиторий CardputerZero/packages.
+To publish the app, do these steps:
+
+1. Write the `store` section in `app-builder.json`. At this time, it contains the values of the template.
+2. Make an icon and screenshots for the app.
+3. Send a pull request to the CardputerZero/packages repository.
