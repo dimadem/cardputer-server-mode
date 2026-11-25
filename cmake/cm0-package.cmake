@@ -11,7 +11,7 @@ set(APP_DEBIAN_REVISION "rev1" CACHE STRING "Debian package revision/vendor suff
 set(APP_DEBIAN_ARCHITECTURE "arm64" CACHE STRING "Debian package architecture")
 # Deliberately a placeholder: the store rejects packages whose Maintainer is
 # still a template/M5Stack identity, so set your own name and email here.
-set(APP_MAINTAINER "lhzw <lhzw@localhost-zero-white.local>" CACHE STRING "Debian package maintainer")
+set(APP_MAINTAINER "dimadem <dimadem@users.noreply.github.com>" CACHE STRING "Debian package maintainer")
 set(APP_PACKAGE_DESCRIPTION "Switch CardputerZero between desktop and lean server mode" CACHE STRING "Debian package summary")
 set(APP_INSTALL_SYSTEMD_SERVICE OFF CACHE BOOL "Install a systemd service file for embedded deployments")
 
