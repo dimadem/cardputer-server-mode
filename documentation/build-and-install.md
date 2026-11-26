@@ -7,29 +7,30 @@ The easiest procedure is to build the app on the CardputerZero. The `cp0-device`
 1. Install the build packages:
 
    ```shell
-   sudo apt install -y build-essential cmake ninja-build libpng-dev libjpeg-dev libfmt-dev libfreetype-dev zlib1g-dev
+   sudo apt install -y git build-essential cmake ninja-build libpng-dev libjpeg-dev libfmt-dev libfreetype-dev zlib1g-dev
    ```
 
-2. Configure the build:
+2. Get the source:
+
+   ```shell
+   git clone https://github.com/dimadem/cardputer-server-mode.git
+   cd cardputer-server-mode
+   ```
+
+3. Configure the build:
 
    ```shell
    cmake --preset cp0-device
    ```
 
-3. Build the app:
+4. Build the app:
 
    ```shell
    cmake --build --preset cp0-device-rel -j2
    ```
 
-The first build also builds LVGL and takes a long time. The next builds take 1 to 2 minutes. The binary file is `build/cp0-native/Release/cz_server_mode`.
+The first build downloads and builds LVGL. This takes approximately 30 minutes. The next builds take 1 to 2 minutes. The binary file is `build/cp0-native/Release/cz_server_mode`.
 
-To copy the source from a computer and build it on the board, use these commands:
-
-```shell
-rsync -a --exclude build ./ <user>@<board>.local:cz-server-mode/
-ssh <user>@<board>.local 'cd cz-server-mode && cmake --build --preset cp0-device-rel -j2'
-```
 
 ## Static checks
 
@@ -59,29 +60,6 @@ To do the checks on the board, do these steps:
    ```
 
 On the board, clang-tidy takes approximately 8 minutes. The script shows only the problems in the files of this app. The template files keep the upstream style.
-
-## Install the scripts
-
-```shell
-sudo install -d /usr/lib/cz-server-mode
-sudo install -m 755 scripts/server-mode.sh scripts/normal-mode.sh scripts/advanced.sh /usr/lib/cz-server-mode/
-sudo install -m 644 scripts/common.sh /usr/lib/cz-server-mode/
-```
-
-## Development shortcut in the launcher
-
-You can start the binary file from APPLaunch without a package. To do this, make the file `/usr/share/APPLaunch/applications/zz-server-mode-dev.desktop`:
-
-```ini
-[Desktop Entry]
-Name=Server Mode (dev)
-Exec=/home/<user>/cz-server-mode/build/cp0-native/Release/cz_server_mode
-Icon=share/images/cz_server_mode.png
-Terminal=false
-Type=Application
-```
-
-After each build, start the app again from the launcher.
 
 ## Debian package
 
@@ -116,8 +94,10 @@ cmake --workflow --preset cp0-cross-package   # → dist/ServerMode_<version>_<r
 To install the package on the board, use this command:
 
 ```shell
-sudo apt install --no-install-recommends ./ServerMode_0.1.0_rev1_arm64.deb
+sudo apt install --no-install-recommends ./dist/ServerMode_0.1.0_rev1_arm64.deb
 ```
+
+To try a change, build the package and install it again. Then start the app again from the launcher.
 
 ## Publication in the CardputerZero Store
 

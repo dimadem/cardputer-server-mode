@@ -14,6 +14,17 @@ These values are from a CardputerZero (CM0, 512 MB):
 
 The app does not remove software. Server mode only stops services. A reboot or one more push of Enter starts them again. Before the app changes the boot files, it makes a copy of them. The "Reset all to defaults" row restores these copies.
 
+## Install on the CardputerZero
+
+Get the package from the [releases page](https://github.com/dimadem/cardputer-server-mode/releases). On the board, use these commands:
+
+```shell
+wget https://github.com/dimadem/cardputer-server-mode/releases/download/v0.1.0/ServerMode_0.1.0_rev1_arm64.deb
+sudo apt install --no-install-recommends ./ServerMode_0.1.0_rev1_arm64.deb
+```
+
+Then open "Server Mode" in the APPLaunch launcher.
+
 ## Functions
 
 The app has these functions:
@@ -47,26 +58,32 @@ Settings page (the `; . , /` keys also operate as arrows without Fn):
 | Enter | Apply the boot options. The app shows a password prompt. |
 | Tab / ESC | Go back. In the password prompt, Tab cancels. |
 
-## Build on the board
+## Remove the app
 
-The `cp0-device` preset builds the app on the CardputerZero. The system of the board is the sysroot.
+1. If you changed the boot options, open the Settings page and select "Reset all to defaults". The board restarts.
+2. Remove the package:
+
+   ```shell
+   sudo apt remove servermode
+   ```
+
+## Build from the source
+
+To change the app, build it on the CardputerZero. A computer is not necessary.
 
 ```shell
-sudo apt install -y build-essential cmake ninja-build libpng-dev libjpeg-dev libfmt-dev libfreetype-dev zlib1g-dev
+sudo apt install -y git build-essential cmake ninja-build libpng-dev libjpeg-dev libfmt-dev libfreetype-dev zlib1g-dev
+git clone https://github.com/dimadem/cardputer-server-mode.git
+cd cardputer-server-mode
 cmake --preset cp0-device
 cmake --build --preset cp0-device-rel -j2
-# binary file: build/cp0-native/Release/cz_server_mode
+cpack --preset cp0-device-deb
+sudo apt install --no-install-recommends ./dist/ServerMode_0.1.0_rev1_arm64.deb
 ```
 
-The build writes the path of the root scripts into the app. Thus, install the scripts in `/usr/lib/cz-server-mode/`:
+The first build downloads and builds LVGL. This takes approximately 30 minutes. The next builds take 1 to 2 minutes. After you install the package, you can remove the source directory from the board.
 
-```shell
-sudo install -d /usr/lib/cz-server-mode
-sudo install -m 755 scripts/server-mode.sh scripts/normal-mode.sh scripts/advanced.sh /usr/lib/cz-server-mode/
-sudo install -m 644 scripts/common.sh /usr/lib/cz-server-mode/
-```
-
-The cross build (`cp0-cross`) and the Debian package (`cpack --preset cp0-device-deb` on the board, `cp0-cross-deb` on a computer) come from the template. The package installs the binary file, the scripts and the launcher entry. Refer to [`documentation/build-and-install.md`](documentation/build-and-install.md).
+For the static checks, the package contents and the cross build, refer to [`documentation/build-and-install.md`](documentation/build-and-install.md).
 
 ## Documentation
 
