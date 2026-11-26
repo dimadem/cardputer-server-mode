@@ -99,6 +99,26 @@ sudo apt install --no-install-recommends ./dist/ServerMode_0.1.0_rev1_arm64.deb
 
 To try a change, build the package and install it again. Then start the app again from the launcher.
 
+## Release
+
+GitHub Actions builds the package. The configuration is in `.github/workflows/build.yml`. The build operates on an arm64 runner in a Debian 13 container. This is the same system as on the board.
+
+- For each push to `main` and each pull request, the workflow builds the app, makes the package and does the static checks. The package is an artifact of the run.
+- For a `v*` tag, the workflow also puts the package on the releases page. If the tag has a hyphen (for example, `v0.2.0-rc1`), the release is a pre-release.
+
+To make a release, do these steps:
+
+1. Change the version in `project(cz_server_mode VERSION ...)` in `CMakeLists.txt` and in `app-builder.json`.
+2. Change the version in the links in `README.md`.
+3. Commit the changes. Then push the commit and the tag:
+
+   ```shell
+   git tag v0.2.0
+   git push origin main v0.2.0
+   ```
+
+If the tag and the version in `CMakeLists.txt` are different, the workflow stops and does not make a release.
+
 ## Publication in the CardputerZero Store
 
 To publish the app, do these steps:

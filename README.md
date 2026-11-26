@@ -1,5 +1,7 @@
 # Server Mode for CardputerZero
 
+[![Build](https://github.com/dimadem/cardputer-server-mode/actions/workflows/build.yml/badge.svg)](https://github.com/dimadem/cardputer-server-mode/actions/workflows/build.yml)
+
 Server Mode is a launcher app for the [M5Stack CardputerZero](https://github.com/CardputerZero). The app changes the board from the normal Raspberry Pi desktop to a server mode with more free memory.
 
 In server mode, the app stops the HDMI desktop and other services that a server does not need. The CardputerZero screen and the APPLaunch launcher continue to operate.
@@ -83,7 +85,7 @@ sudo apt install --no-install-recommends ./dist/ServerMode_0.1.0_rev1_arm64.deb
 
 The first build downloads and builds LVGL. This takes approximately 10 minutes. The next builds take 1 to 2 minutes. After you install the package, you can remove the source directory from the board.
 
-For the static checks, the package contents and the cross build, refer to [`documentation/build-and-install.md`](documentation/build-and-install.md).
+GitHub Actions also builds the package for each change and for each release. For the static checks, the package contents, the release procedure and the cross build, refer to [`documentation/build-and-install.md`](documentation/build-and-install.md).
 
 ## Documentation
 
