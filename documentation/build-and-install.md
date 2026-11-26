@@ -29,7 +29,7 @@ The easiest procedure is to build the app on the CardputerZero. The `cp0-device`
    cmake --build --preset cp0-device-rel -j2
    ```
 
-The first build downloads and builds LVGL. This takes approximately 30 minutes. The next builds take 1 to 2 minutes. The binary file is `build/cp0-native/Release/cz_server_mode`.
+The first build downloads and builds LVGL. This takes approximately 10 minutes. The next builds take 1 to 2 minutes. The binary file is `build/cp0-native/Release/cz_server_mode`.
 
 
 ## Static checks
