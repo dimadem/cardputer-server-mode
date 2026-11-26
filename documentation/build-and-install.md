@@ -94,8 +94,18 @@ CPack makes the package. The configuration is in `cmake/cm0-package.cmake`.
 | `/etc/cz-server-mode.conf` | The default configuration (`dark_mode=yes`) |
 | `/usr/share/APPLaunch/applications/cz_server_mode.desktop` | The "Server Mode" launcher entry |
 | `/usr/share/APPLaunch/share/images/cz_server_mode*.png` | The icon |
+| `/usr/share/cz_server_mode/fonts/` | The icon font |
+| `/usr/share/doc/servermode/` | `README.md` and the licenses |
 
 The package depends on `sudo`, `util-linux` and `procps`. The package does not install a system service (`APP_INSTALL_SYSTEMD_SERVICE OFF`). The rules of the CardputerZero Store do not let an app package install a root service. The app makes the boot service only when the user selects "Boot into server mode".
+
+To build the package on the board, use these commands:
+
+```shell
+cmake --preset cp0-device -DAPP_MAINTAINER="<name> <<email>>"
+cmake --build --preset cp0-device-rel -j2
+cpack --preset cp0-device-deb   # → dist/ServerMode_<version>_<revision>_arm64.deb
+```
 
 To build the package on a computer (cross build from the template), use this command:
 

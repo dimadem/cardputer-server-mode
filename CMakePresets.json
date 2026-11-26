@@ -222,6 +222,20 @@
             ],
             "configFile": "${sourceDir}/build/cp0-cross/CPackConfig.cmake",
             "packageDirectory": "${sourceDir}/dist"
+        },
+        {
+            "name": "cp0-device-deb",
+            "displayName": "CardputerZero Debian Package (on-device build)",
+            "description": "Package the on-device release build (cp0-device-rel) as a Debian package in dist/",
+            "configurePreset": "cp0-device",
+            "generators": [
+                "DEB"
+            ],
+            "configurations": [
+                "Release"
+            ],
+            "configFile": "${sourceDir}/build/cp0-native/CPackConfig.cmake",
+            "packageDirectory": "${sourceDir}/dist"
         }
     ],
     "workflowPresets": [

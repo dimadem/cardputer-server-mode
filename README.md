@@ -66,7 +66,7 @@ sudo install -m 755 scripts/server-mode.sh scripts/normal-mode.sh scripts/advanc
 sudo install -m 644 scripts/common.sh /usr/lib/cz-server-mode/
 ```
 
-The cross build (`cp0-cross`) and the Debian package (`cpack --preset cp0-cross-deb`) come from the template. The package installs the binary file, the scripts and the launcher entry. Refer to [`documentation/build-and-install.md`](documentation/build-and-install.md).
+The cross build (`cp0-cross`) and the Debian package (`cpack --preset cp0-device-deb` on the board, `cp0-cross-deb` on a computer) come from the template. The package installs the binary file, the scripts and the launcher entry. Refer to [`documentation/build-and-install.md`](documentation/build-and-install.md).
 
 ## Documentation
 
