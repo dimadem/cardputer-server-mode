@@ -18,7 +18,6 @@ namespace screen {
 namespace {
 
 constexpr uint32_t kJobPeriodMs = 200;
-constexpr int kListHeight = 94;
 constexpr const char* kHint = "↑↓ select · ←→ change · Enter apply · Tab back";
 
 } // namespace
@@ -45,7 +44,9 @@ AdvancedPanel::AdvancedPanel(lv_obj_t* content,
 
     list_ = lv_obj_create(column);
     lv_obj_remove_style_all(list_);
-    lv_obj_set_size(list_, LV_PCT(100), kListHeight);
+    // the list takes the free height, so the hint line always stays at the bottom
+    lv_obj_set_width(list_, LV_PCT(100));
+    lv_obj_set_flex_grow(list_, 1);
     lv_obj_set_flex_flow(list_, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_scrollbar_mode(list_, LV_SCROLLBAR_MODE_OFF);
 
@@ -84,7 +85,7 @@ AdvancedPanel::AdvancedPanel(lv_obj_t* content,
     selected_ = 1; // first selectable row
     render_all();
 
-    update_password_label();
+    update_password_row();
     if (!status_) {
         set_message("Boot status unavailable: reboot options disabled", Tone::Error);
     }
@@ -365,7 +366,7 @@ void AdvancedPanel::on_key(uint32_t key) {
             start_job();
         }
         else if (edit_password(password_, key)) {
-            update_password_label();
+            update_password_row();
         }
         return;
     }
@@ -410,18 +411,20 @@ void AdvancedPanel::on_key(uint32_t key) {
 
 // ---- password prompt and the root job
 
-void AdvancedPanel::update_password_label() {
-    const auto colors = view::palette(view_model_.is_dark_mode());
-    // the password row is empty until a password is asked (Enter is in the hint line);
-    // it keeps its height, so the hint line stays at the bottom
-    set_text_if_changed(password_label_,
-                        prompt_ != Prompt::None ? password_text(password_).c_str() : "");
-    lv_obj_set_style_text_color(password_label_, colors.text, 0);
+// The password row is shown only while a password is asked; the list gets its height back.
+void AdvancedPanel::update_password_row() {
+    const bool asking = prompt_ != Prompt::None;
+    lv_obj_set_flag(password_label_, LV_OBJ_FLAG_HIDDEN, !asking);
+    if (!asking) return;
+    set_text_if_changed(password_label_, password_text(password_).c_str());
+    // the list is one line shorter now: keep the selected row visible
+    lv_obj_update_layout(list_);
+    lv_obj_scroll_to_view(items_[selected_].row, LV_ANIM_OFF);
 }
 
 void AdvancedPanel::ask_password(Prompt prompt) {
     prompt_ = prompt;
-    update_password_label();
+    update_password_row();
     set_message(prompt == Prompt::Reset ? "Reset: sudo password, Enter · Tab cancel"
                                         : "sudo password, Enter · Tab cancel",
                 Tone::Warning);
@@ -430,7 +433,7 @@ void AdvancedPanel::ask_password(Prompt prompt) {
 void AdvancedPanel::cancel_password() {
     prompt_ = Prompt::None;
     SudoJob::wipe(password_);
-    update_password_label();
+    update_password_row();
     set_message(kHint, Tone::Info);
 }
 
@@ -463,7 +466,7 @@ void AdvancedPanel::start_job() {
 
     std::string error;
     const bool started = job_.start(password_, argv, error);
-    update_password_label();
+    update_password_row();
     if (!started) {
         set_message("Failed to start: " + error, Tone::Error);
         return;
@@ -497,7 +500,7 @@ void AdvancedPanel::finish_job(const JobResult& result) {
         case JobOutcome::Success: {
             const bool reset = prompt_ == Prompt::Reset;
             prompt_ = Prompt::None;
-            update_password_label();
+            update_password_row();
             set_message(reset ? "Reset done. Rebooting…" : "Applied. Rebooting…", Tone::Success);
             return;
         }
@@ -507,7 +510,7 @@ void AdvancedPanel::finish_job(const JobResult& result) {
             return;
         case JobOutcome::NotAllowed:
             prompt_ = Prompt::None;
-            update_password_label();
+            update_password_row();
             set_message("sudo: not allowed for this user", Tone::Error);
             return;
         case JobOutcome::Busy:
@@ -521,7 +524,7 @@ void AdvancedPanel::finish_job(const JobResult& result) {
     prompt_ = Prompt::None;
     load_status();
     render_all();
-    update_password_label();
+    update_password_row();
     set_message(result.outcome == JobOutcome::Busy
                     ? "Busy: another switch is running"
                     : "Error, code " + std::to_string(result.exit_code) + " (see log)",

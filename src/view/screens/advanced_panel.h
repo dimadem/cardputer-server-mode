@@ -79,7 +79,7 @@ private:
     void start_job();
     void finish_job(const JobResult& result);
     void set_message(const std::string& text, Tone tone);
-    void update_password_label();
+    void update_password_row();
     void set_busy(bool busy);
 
     viewmodel::BaseViewModel& view_model_;
