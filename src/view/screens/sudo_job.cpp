@@ -87,7 +87,9 @@ bool SudoJob::start(std::string& password,
     // LC_ALL=C keeps the sudo messages in English, so wrong_password() can match them.
     std::vector<char*> env;
     for (char** var = environ; var != nullptr && *var != nullptr; ++var) {
-        if (std::strncmp(*var, "LC_ALL=", 7) != 0) env.push_back(*var);
+        if (std::strncmp(*var, "LC_ALL=", 7) != 0) {
+            env.push_back(*var);
+        }
     }
     env.push_back(const_cast<char*>("LC_ALL=C"));
     env.push_back(nullptr);
@@ -110,7 +112,9 @@ bool SudoJob::start(std::string& password,
     const pid_t pid = fork();
     if (pid < 0) {
         error = std::strerror(errno);
-        for (int fd : {in_pipe[0], in_pipe[1], out_pipe[0], out_pipe[1]}) close(fd);
+        for (int fd : {in_pipe[0], in_pipe[1], out_pipe[0], out_pipe[1]}) {
+            close(fd);
+        }
         wipe(password);
         return false;
     }
@@ -165,7 +169,7 @@ void SudoJob::drain() {
     }
 }
 
-// Exit codes of scripts/*.sh, plus 127 from the child when execv fails.
+// Exit codes of scripts/*.sh, plus 127 from the child when execve fails.
 enum class ScriptExit : int {
     Ok = 0,
     PartialFailure = 1,

@@ -36,7 +36,8 @@ step clang-tidy
 if [ -f "$BUILD/compile_commands.json" ]; then
   clang-tidy -p "$BUILD" --quiet "${FILES[@]}" 2>/dev/null | grep -E 'warning:|error:' -A3 && status=1
 else
-  echo "no $BUILD/compile_commands.json: build first"; status=1
+  echo "no $BUILD/compile_commands.json: build first"
+  status=1
 fi
 
 step "cppcheck (bugs, dead code)"
@@ -60,4 +61,4 @@ else
   echo "shellcheck not installed: skipped"
 fi
 
-exit $status
+exit "$status"

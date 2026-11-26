@@ -1,7 +1,5 @@
 /*
- * Domain types of Server Mode: the service groups that server mode stops
- * (stored per user, no root needed), the root helper scripts and the
- * boot-time state reported by "advanced.sh status".
+ * Server Mode settings: stop groups, helper scripts and boot-time state.
  *
  * SPDX-License-Identifier: MIT
  */
@@ -19,16 +17,14 @@
 
 namespace settings {
 
-// ---- service groups
-
 // Keep in sync with ALL_GROUPS / group_units() in scripts/common.sh.
 enum class StopGroup : uint8_t { Desktop, Printing, PackageKit, Portals, Accounts, Nfs };
 inline constexpr size_t kStopGroupCount = 6;
 
 struct StopGroupInfo {
     StopGroup group{};
-    std::string_view id;    // name understood by server-mode.sh
-    std::string_view title; // shown in the UI
+    std::string_view id; // server-mode.sh argument
+    std::string_view title;
 };
 
 // All groups, in UI and script order.
@@ -68,12 +64,9 @@ private:
 GroupSet load_enabled_groups(); // all groups when nothing was saved
 bool save_enabled_groups(const GroupSet& groups);
 
-// ---- root helper scripts (installed in CZ_SCRIPT_DIR)
-
+// Root helper scripts, installed in CZ_SCRIPT_DIR.
 enum class Script { ServerMode, NormalMode, Advanced };
 std::string script_path(Script script);
-
-// ---- boot-time state (advanced.sh)
 
 // gpu_mem values the UI offers; 16 MB is the Raspberry Pi minimum.
 enum class GpuMemory : int { Mb128 = 128, Mb64 = 64, Mb32 = 32, Mb16 = 16 };

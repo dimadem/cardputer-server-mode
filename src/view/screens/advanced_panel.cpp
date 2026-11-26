@@ -28,7 +28,9 @@ AdvancedPanel::AdvancedPanel(lv_obj_t* content,
     : view_model_(view_model) {
     password_.reserve(kMaxPassword + 1);
     row_font_ = assets.load_standard_font(13, app::StandardFontWeight::Regular);
-    if (!row_font_) row_font_ = &lv_font_montserrat_12;
+    if (row_font_ == nullptr) {
+        row_font_ = &lv_font_montserrat_12;
+    }
     const auto* regular = assets.load_standard_font(14, app::StandardFontWeight::Regular);
     const auto* small = assets.load_standard_font(12, app::StandardFontWeight::Regular);
     auto* dark = view_model_.dark_mode_subject();
@@ -55,7 +57,6 @@ AdvancedPanel::AdvancedPanel(lv_obj_t* content,
     lv_obj_set_style_pad_hor(password_label_, 4, 0);
     lv_obj_set_style_pad_hor(message_label_, 4, 0);
 
-    // ---- items
     using settings::BootFlag;
     const auto header = [](std::string_view title) { return Item{Kind::Header, title}; };
     const auto flag = [](std::string_view title, BootFlag boot_flag) {
@@ -100,7 +101,7 @@ AdvancedPanel::AdvancedPanel(lv_obj_t* content,
 
 AdvancedPanel::~AdvancedPanel() {
     platform::clear_screen_key_handler(key_cb, this);
-    if (timer_) {
+    if (timer_ != nullptr) {
         lv_timer_delete(timer_);
     }
     job_.wait();
@@ -108,240 +109,21 @@ AdvancedPanel::~AdvancedPanel() {
     SudoJob::wipe(password_);
 }
 
-void AdvancedPanel::add_item(Item item) {
-    item.row = lv_obj_create(list_);
-    lv_obj_remove_style_all(item.row);
-    lv_obj_set_size(item.row, LV_PCT(100), LV_SIZE_CONTENT);
-    lv_obj_set_style_pad_hor(item.row, 4, 0);
-    lv_obj_set_style_pad_ver(item.row, 1, 0);
-    lv_obj_set_style_radius(item.row, 3, 0);
-    lv_obj_clear_flag(item.row, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_flex_flow(item.row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(item.row,
-                          LV_FLEX_ALIGN_SPACE_BETWEEN,
-                          LV_FLEX_ALIGN_CENTER,
-                          LV_FLEX_ALIGN_CENTER);
-
-    item.label = lv_label_create(item.row);
-    lv_obj_set_flex_grow(item.label, 1);
-    lv_label_set_long_mode(item.label, LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_font(item.label, row_font_, 0);
-
-    item.value_label = lv_label_create(item.row);
-    lv_obj_set_style_text_font(item.value_label, row_font_, 0);
-    lv_label_set_text(item.value_label, "");
-    items_.push_back(item);
-}
-
-// ---- state from advanced.sh vs the choices on screen
-
-void AdvancedPanel::load_status() {
-    status_ = settings::read_boot_status();
-    if (!status_) {
+void AdvancedPanel::tick_cb(lv_timer_t* timer) {
+    auto* panel = static_cast<AdvancedPanel*>(lv_timer_get_user_data(timer));
+    if (panel == nullptr || !panel->job_.running()) {
         return;
     }
-    for (auto& item : items_) {
-        if (item.kind == Kind::Gpu) {
-            item.gpu = settings::gpu_from_megabytes(status_->gpu_mb);
-        }
-        else if (item.kind == Kind::Flag) {
-            item.value = status_->flag(item.flag);
-        }
+    if (const auto result = panel->job_.poll()) {
+        panel->finish_job(*result);
+        return;
+    }
+    const uint32_t elapsed = panel->job_.elapsed_s();
+    if (elapsed != panel->last_elapsed_s_) {
+        panel->last_elapsed_s_ = elapsed;
+        panel->set_message("Applying… " + std::to_string(elapsed) + " s", Tone::Info);
     }
 }
-
-settings::GroupSet AdvancedPanel::enabled_groups() const {
-    settings::GroupSet groups;
-    for (const auto& item : items_) {
-        if (item.kind == Kind::Group) groups.set(item.group, item.value);
-    }
-    return groups;
-}
-
-// The boot unit stops the groups chosen when it was written: "*" when they differ now.
-bool AdvancedPanel::boot_groups_outdated() const {
-    return status_ && status_->boot_server && status_->boot_groups != enabled_groups();
-}
-
-bool AdvancedPanel::item_changed(const Item& item) const {
-    if (!status_) return false; // unknown device state: nothing to compare with
-    switch (item.kind) {
-        case Kind::Gpu: return item.gpu && settings::megabytes(*item.gpu) != status_->gpu_mb;
-        case Kind::Flag:
-            if (status_->flag(item.flag) != item.value) return true;
-            return item.flag == settings::BootFlag::BootServer && item.value &&
-                   boot_groups_outdated();
-        case Kind::Header:
-        case Kind::Group:
-        case Kind::Reset: return false;
-    }
-    return false;
-}
-
-bool AdvancedPanel::has_boot_changes() const {
-    return status_ && std::any_of(items_.begin(), items_.end(), [this](const Item& item) {
-               return item_changed(item);
-           });
-}
-
-// Only what differs from the device goes to advanced.sh.
-std::vector<std::string> AdvancedPanel::changed_args() const {
-    std::vector<std::string> args;
-    for (const auto& item : items_) {
-        if (!item_changed(item)) continue;
-        if (item.kind == Kind::Gpu && item.gpu) {
-            args.push_back("gpu=" + std::to_string(settings::megabytes(*item.gpu)));
-        }
-        else if (item.kind == Kind::Flag) {
-            args.push_back(std::string(settings::flag_key(item.flag)) + "=" +
-                           (item.value ? "1" : "0"));
-            if (item.flag == settings::BootFlag::BootServer && item.value) {
-                args.push_back("groups=" + enabled_groups().csv());
-            }
-        }
-    }
-    return args;
-}
-
-bool AdvancedPanel::boot_server_chosen() const {
-    return std::any_of(items_.begin(), items_.end(), [](const Item& item) {
-        return item.kind == Kind::Flag && item.flag == settings::BootFlag::BootServer && item.value;
-    });
-}
-
-// ---- rendering
-
-void AdvancedPanel::render_item(size_t index) {
-    auto& item = items_[index];
-    const auto colors = view::palette(view_model_.is_dark_mode());
-    // left: name (yellow + "*" when changed but not applied yet)
-    // right: "yes" (will be switched off / on) in color, "no" dimmed
-    std::string value;
-    bool active = false;
-    switch (item.kind) {
-        case Kind::Header:
-        case Kind::Reset: break;
-        case Kind::Group:
-        case Kind::Flag:
-            active = item.value;
-            value = item.value ? "yes" : "no";
-            break;
-        case Kind::Gpu: {
-            // nullopt: show the value from config.txt as it is
-            const int mb =
-                item.gpu ? settings::megabytes(*item.gpu) : (status_ ? status_->gpu_mb : 0);
-            active = item.gpu != settings::GpuMemory::Mb128;
-            value = mb > 0 ? "< " + std::to_string(mb) + " MB >" : "?";
-            break;
-        }
-    }
-    const bool changed = item_changed(item);
-    const bool indented =
-        item.kind == Kind::Group || item.kind == Kind::Gpu || item.kind == Kind::Flag;
-    std::string name = std::string(indented ? "  " : "") + std::string(item.title);
-    if (changed) name += " *";
-    set_text_if_changed(item.label, name.c_str());
-    set_text_if_changed(item.value_label, value.c_str());
-
-    lv_color_t color = colors.text;
-    if (item.kind == Kind::Header)
-        color = colors.text_disabled;
-    else if (item.kind == Kind::Reset)
-        color = colors.error;
-    else if (changed)
-        color = colors.warning;
-    lv_obj_set_style_text_color(item.label, color, 0);
-    lv_obj_set_style_text_color(item.value_label,
-                                active ? colors.success : colors.text_disabled,
-                                0);
-
-    lv_obj_set_style_bg_color(item.row, colors.primary, 0);
-    lv_obj_set_style_bg_opa(item.row, index == selected_ ? LV_OPA_30 : LV_OPA_TRANSP, 0);
-}
-
-void AdvancedPanel::render_all() {
-    for (size_t i = 0; i < items_.size(); ++i) render_item(i);
-    if (selected_ < items_.size()) {
-        lv_obj_scroll_to_view(items_[selected_].row, LV_ANIM_OFF);
-    }
-}
-
-void AdvancedPanel::move_selection(int delta) {
-    size_t next = selected_;
-    while (true) {
-        if (delta < 0 && next == 0) return;
-        next = delta < 0 ? next - 1 : next + 1;
-        if (next >= items_.size()) return;
-        if (items_[next].kind != Kind::Header) break;
-    }
-    const size_t previous = selected_;
-    selected_ = next;
-    render_item(previous);
-    render_item(selected_);
-    // keep the section header visible when moving to the first row of a section
-    if (items_[selected_ - 1].kind == Kind::Header) {
-        lv_obj_scroll_to_view(items_[selected_ - 1].row, LV_ANIM_OFF);
-    }
-    lv_obj_scroll_to_view(items_[selected_].row, LV_ANIM_OFF);
-}
-
-// ---- editing
-
-bool AdvancedPanel::save_groups() {
-    if (!settings::save_enabled_groups(enabled_groups())) {
-        set_message("Failed to save settings", Tone::Error);
-        return false;
-    }
-    set_message(boot_groups_outdated() ? "Saved. For boot: Enter (reboot)"
-                                       : "Saved: applies on next server mode switch",
-                Tone::Success);
-    return true;
-}
-
-void AdvancedPanel::change_value(int delta) {
-    auto& item = items_[selected_];
-    switch (item.kind) {
-        case Kind::Group:
-            item.value = !item.value;
-            if (!save_groups()) item.value = !item.value; // the screen keeps showing the file
-            render_all(); // the "boot into server" row may become outdated
-            return;
-        case Kind::Flag:
-        case Kind::Gpu:
-            if (!status_) {
-                set_message("Boot status unavailable", Tone::Error);
-                return;
-            }
-            break;
-        case Kind::Header:
-        case Kind::Reset: return;
-    }
-    switch (item.kind) {
-        case Kind::Flag: item.value = !item.value; break;
-        case Kind::Gpu: {
-            const auto& choices = settings::kGpuChoices;
-            const auto it =
-                item.gpu ? std::find(choices.begin(), choices.end(), *item.gpu) : choices.end();
-            const auto count = static_cast<std::ptrdiff_t>(choices.size());
-            const auto index = it == choices.end() ? 0 : std::distance(choices.begin(), it);
-            // wraps: 128 -> 64 -> 32 -> 16 -> 128
-            item.gpu = choices[static_cast<size_t>((index + delta + count) % count)];
-            break;
-        }
-        case Kind::Header:
-        case Kind::Group:
-        case Kind::Reset: return;
-    }
-    render_item(selected_);
-    if (item.kind == Kind::Gpu && item.gpu == settings::GpuMemory::Mb16) {
-        set_message("16 MB: no camera or hardware video", Tone::Warning);
-    }
-    else {
-        set_message(has_boot_changes() ? "Enter: apply and reboot" : "No changes", Tone::Info);
-    }
-}
-
-// ---- keys
 
 bool AdvancedPanel::key_cb(uint32_t key, void* user_data) {
     auto* panel = static_cast<AdvancedPanel*>(user_data);
@@ -357,7 +139,6 @@ void AdvancedPanel::on_key(uint32_t key) {
         return;
     }
 
-    // password prompt: only typing, Enter (confirm) and Tab (cancel)
     if (prompt_ != Prompt::None) {
         if (key == kKeyTab) {
             cancel_password();
@@ -405,21 +186,255 @@ void AdvancedPanel::on_key(uint32_t key) {
                 set_message("No changes that need a reboot", Tone::Warning);
             }
             break;
-        default: break; // swallow every other key: no accidental typing while picking options
+        default: break;
     }
 }
 
-// ---- password prompt and the root job
+void AdvancedPanel::add_item(Item item) {
+    item.row = lv_obj_create(list_);
+    lv_obj_remove_style_all(item.row);
+    lv_obj_set_size(item.row, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_pad_hor(item.row, 4, 0);
+    lv_obj_set_style_pad_ver(item.row, 1, 0);
+    lv_obj_set_style_radius(item.row, 3, 0);
+    lv_obj_clear_flag(item.row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(item.row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(item.row,
+                          LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
 
-// The password row is shown only while a password is asked; the list gets its height back.
-void AdvancedPanel::update_password_row() {
-    const bool asking = prompt_ != Prompt::None;
-    lv_obj_set_flag(password_label_, LV_OBJ_FLAG_HIDDEN, !asking);
-    if (!asking) return;
-    set_text_if_changed(password_label_, password_text(password_).c_str());
-    // the list is one line shorter now: keep the selected row visible
-    lv_obj_update_layout(list_);
+    item.label = lv_label_create(item.row);
+    lv_obj_set_flex_grow(item.label, 1);
+    lv_label_set_long_mode(item.label, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_font(item.label, row_font_, 0);
+
+    item.value_label = lv_label_create(item.row);
+    lv_obj_set_style_text_font(item.value_label, row_font_, 0);
+    lv_label_set_text(item.value_label, "");
+    items_.push_back(item);
+}
+
+void AdvancedPanel::load_status() {
+    status_ = settings::read_boot_status();
+    if (!status_) {
+        return;
+    }
+    for (auto& item : items_) {
+        if (item.kind == Kind::Gpu) {
+            item.gpu = settings::gpu_from_megabytes(status_->gpu_mb);
+        }
+        else if (item.kind == Kind::Flag) {
+            item.value = status_->flag(item.flag);
+        }
+    }
+}
+
+settings::GroupSet AdvancedPanel::enabled_groups() const {
+    settings::GroupSet groups;
+    for (const auto& item : items_) {
+        if (item.kind == Kind::Group) {
+            groups.set(item.group, item.value);
+        }
+    }
+    return groups;
+}
+
+// The boot unit stops the groups chosen when it was written: "*" when they differ now.
+bool AdvancedPanel::boot_groups_outdated() const {
+    return status_ && status_->boot_server && status_->boot_groups != enabled_groups();
+}
+
+bool AdvancedPanel::item_changed(const Item& item) const {
+    if (!status_) {
+        return false; // unknown device state: nothing to compare with
+    }
+    switch (item.kind) {
+        case Kind::Gpu: return item.gpu && settings::megabytes(*item.gpu) != status_->gpu_mb;
+        case Kind::Flag:
+            if (status_->flag(item.flag) != item.value) {
+                return true;
+            }
+            return item.flag == settings::BootFlag::BootServer && item.value &&
+                   boot_groups_outdated();
+        case Kind::Header:
+        case Kind::Group:
+        case Kind::Reset: return false;
+    }
+    return false;
+}
+
+bool AdvancedPanel::has_boot_changes() const {
+    return status_ && std::any_of(items_.begin(), items_.end(), [this](const Item& item) {
+               return item_changed(item);
+           });
+}
+
+// Only what differs from the device goes to advanced.sh.
+std::vector<std::string> AdvancedPanel::changed_args() const {
+    std::vector<std::string> args;
+    for (const auto& item : items_) {
+        if (!item_changed(item)) {
+            continue;
+        }
+        if (item.kind == Kind::Gpu && item.gpu) {
+            args.push_back("gpu=" + std::to_string(settings::megabytes(*item.gpu)));
+        }
+        else if (item.kind == Kind::Flag) {
+            args.push_back(std::string(settings::flag_key(item.flag)) + "=" +
+                           (item.value ? "1" : "0"));
+            if (item.flag == settings::BootFlag::BootServer && item.value) {
+                args.push_back("groups=" + enabled_groups().csv());
+            }
+        }
+    }
+    return args;
+}
+
+bool AdvancedPanel::boot_server_chosen() const {
+    return std::any_of(items_.begin(), items_.end(), [](const Item& item) {
+        return item.kind == Kind::Flag && item.flag == settings::BootFlag::BootServer && item.value;
+    });
+}
+
+void AdvancedPanel::render_item(size_t index) {
+    auto& item = items_[index];
+    const auto colors = view::palette(view_model_.is_dark_mode());
+    std::string value;
+    bool active = false;
+    switch (item.kind) {
+        case Kind::Header:
+        case Kind::Reset: break;
+        case Kind::Group:
+        case Kind::Flag:
+            active = item.value;
+            value = item.value ? "yes" : "no";
+            break;
+        case Kind::Gpu: {
+            const int mb =
+                item.gpu ? settings::megabytes(*item.gpu) : (status_ ? status_->gpu_mb : 0);
+            active = item.gpu != settings::GpuMemory::Mb128;
+            value = mb > 0 ? "< " + std::to_string(mb) + " MB >" : "?";
+            break;
+        }
+    }
+    const bool changed = item_changed(item);
+    const bool indented =
+        item.kind == Kind::Group || item.kind == Kind::Gpu || item.kind == Kind::Flag;
+    std::string name = std::string(indented ? "  " : "") + std::string(item.title);
+    if (changed) {
+        name += " *";
+    }
+    set_text_if_changed(item.label, name.c_str());
+    set_text_if_changed(item.value_label, value.c_str());
+
+    lv_color_t color = colors.text;
+    if (item.kind == Kind::Header) {
+        color = colors.text_disabled;
+    }
+    else if (item.kind == Kind::Reset) {
+        color = colors.error;
+    }
+    else if (changed) {
+        color = colors.warning;
+    }
+    lv_obj_set_style_text_color(item.label, color, 0);
+    lv_obj_set_style_text_color(item.value_label,
+                                active ? colors.success : colors.text_disabled,
+                                0);
+
+    lv_obj_set_style_bg_color(item.row, colors.primary, 0);
+    lv_obj_set_style_bg_opa(item.row, index == selected_ ? LV_OPA_30 : LV_OPA_TRANSP, 0);
+}
+
+void AdvancedPanel::render_all() {
+    for (size_t i = 0; i < items_.size(); ++i) {
+        render_item(i);
+    }
+    if (selected_ < items_.size()) {
+        lv_obj_scroll_to_view(items_[selected_].row, LV_ANIM_OFF);
+    }
+}
+
+void AdvancedPanel::move_selection(int delta) {
+    size_t next = selected_;
+    while (true) {
+        if (delta < 0 && next == 0) {
+            return;
+        }
+        next = delta < 0 ? next - 1 : next + 1;
+        if (next >= items_.size()) {
+            return;
+        }
+        if (items_[next].kind != Kind::Header) {
+            break;
+        }
+    }
+    const size_t previous = selected_;
+    selected_ = next;
+    render_item(previous);
+    render_item(selected_);
+    // keep the section header visible when moving to the first row of a section
+    if (items_[selected_ - 1].kind == Kind::Header) {
+        lv_obj_scroll_to_view(items_[selected_ - 1].row, LV_ANIM_OFF);
+    }
     lv_obj_scroll_to_view(items_[selected_].row, LV_ANIM_OFF);
+}
+
+bool AdvancedPanel::save_groups() {
+    if (!settings::save_enabled_groups(enabled_groups())) {
+        set_message("Failed to save settings", Tone::Error);
+        return false;
+    }
+    set_message(boot_groups_outdated() ? "Saved. For boot: Enter (reboot)"
+                                       : "Saved: applies on next server mode switch",
+                Tone::Success);
+    return true;
+}
+
+void AdvancedPanel::change_value(int delta) {
+    auto& item = items_[selected_];
+    switch (item.kind) {
+        case Kind::Group:
+            item.value = !item.value;
+            if (!save_groups()) {
+                item.value = !item.value; // the screen keeps showing the file
+            }
+            render_all(); // the "boot into server" row may become outdated
+            return;
+        case Kind::Flag:
+        case Kind::Gpu:
+            if (!status_) {
+                set_message("Boot status unavailable", Tone::Error);
+                return;
+            }
+            break;
+        case Kind::Header:
+        case Kind::Reset: return;
+    }
+    switch (item.kind) {
+        case Kind::Flag: item.value = !item.value; break;
+        case Kind::Gpu: {
+            const auto& choices = settings::kGpuChoices;
+            const auto it =
+                item.gpu ? std::find(choices.begin(), choices.end(), *item.gpu) : choices.end();
+            const auto count = static_cast<std::ptrdiff_t>(choices.size());
+            const auto index = it == choices.end() ? 0 : std::distance(choices.begin(), it);
+            // wraps: 128 -> 64 -> 32 -> 16 -> 128
+            item.gpu = choices[static_cast<size_t>((index + delta + count) % count)];
+            break;
+        }
+        case Kind::Header:
+        case Kind::Group:
+        case Kind::Reset: return;
+    }
+    render_item(selected_);
+    if (item.kind == Kind::Gpu && item.gpu == settings::GpuMemory::Mb16) {
+        set_message("16 MB: no camera or hardware video", Tone::Warning);
+    }
+    else {
+        set_message(has_boot_changes() ? "Enter: apply and reboot" : "No changes", Tone::Info);
+    }
 }
 
 void AdvancedPanel::ask_password(Prompt prompt) {
@@ -435,6 +450,23 @@ void AdvancedPanel::cancel_password() {
     SudoJob::wipe(password_);
     update_password_row();
     set_message(kHint, Tone::Info);
+}
+
+// The password row is shown only while asked, so the list gets its height back.
+void AdvancedPanel::update_password_row() {
+    const bool asking = prompt_ != Prompt::None;
+    lv_obj_set_flag(password_label_, LV_OBJ_FLAG_HIDDEN, !asking);
+    if (!asking) {
+        return;
+    }
+    set_text_if_changed(password_label_, password_text(password_).c_str());
+    // the list is one line shorter now: keep the selected row visible
+    lv_obj_update_layout(list_);
+    lv_obj_scroll_to_view(items_[selected_].row, LV_ANIM_OFF);
+}
+
+void AdvancedPanel::set_message(const std::string& text, Tone tone) {
+    set_tone_text(message_label_, text, tone, view_model_.is_dark_mode());
 }
 
 void AdvancedPanel::set_busy(bool busy) {
@@ -476,22 +508,6 @@ void AdvancedPanel::start_job() {
     set_message("Applying…", Tone::Info);
 }
 
-void AdvancedPanel::tick_cb(lv_timer_t* timer) {
-    auto* panel = static_cast<AdvancedPanel*>(lv_timer_get_user_data(timer));
-    if (!panel || !panel->job_.running()) {
-        return;
-    }
-    if (const auto result = panel->job_.poll()) {
-        panel->finish_job(*result);
-        return;
-    }
-    const uint32_t elapsed = panel->job_.elapsed_s();
-    if (elapsed != panel->last_elapsed_s_) {
-        panel->last_elapsed_s_ = elapsed;
-        panel->set_message("Applying… " + std::to_string(elapsed) + " s", Tone::Info);
-    }
-}
-
 void AdvancedPanel::finish_job(const JobResult& result) {
     set_busy(false);
     const auto& output = job_.output();
@@ -529,10 +545,6 @@ void AdvancedPanel::finish_job(const JobResult& result) {
                     ? "Busy: another switch is running"
                     : "Error, code " + std::to_string(result.exit_code) + " (see log)",
                 Tone::Error);
-}
-
-void AdvancedPanel::set_message(const std::string& text, Tone tone) {
-    set_tone_text(message_label_, text, tone, view_model_.is_dark_mode());
 }
 
 } // namespace screen

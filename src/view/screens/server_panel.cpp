@@ -17,8 +17,8 @@
 #include <cstring>
 #include <dirent.h>
 #include <optional>
-#include <utility>
 #include <string_view>
+#include <utility>
 #include <unistd.h>
 #include <vector>
 
@@ -26,8 +26,8 @@ namespace screen {
 namespace {
 
 constexpr const char* kStateFile = "/run/cz-server-mode/stopped-units";
-constexpr uint32_t kIdlePeriodMs = 2000; // status refresh
-constexpr uint32_t kJobPeriodMs = 200;   // while a switch runs
+constexpr uint32_t kIdlePeriodMs = 2000;
+constexpr uint32_t kJobPeriodMs = 200;
 constexpr uint32_t kProcRescanMs = 10000;
 
 struct MemInfo {
@@ -170,13 +170,13 @@ ServerPanel::ServerPanel(lv_obj_t* content,
     timer_ = lv_timer_create(tick_cb, kIdlePeriodMs, this);
 
     refresh_status();
-    update_password_label();
+    update_password_row();
     set_message("Enter sudo password, press Enter", Tone::Info);
 }
 
 ServerPanel::~ServerPanel() {
     platform::clear_screen_key_handler(key_cb, this);
-    if (timer_) {
+    if (timer_ != nullptr) {
         lv_timer_delete(timer_);
     }
     job_.wait();
@@ -186,7 +186,7 @@ ServerPanel::~ServerPanel() {
 
 void ServerPanel::tick_cb(lv_timer_t* timer) {
     auto* panel = static_cast<ServerPanel*>(lv_timer_get_user_data(timer));
-    if (!panel) {
+    if (panel == nullptr) {
         return;
     }
     if (!panel->job_.running()) {
@@ -198,7 +198,7 @@ void ServerPanel::tick_cb(lv_timer_t* timer) {
         return;
     }
     const uint32_t elapsed = panel->job_.elapsed_s();
-    if (elapsed != panel->last_elapsed_s_) { // the text changes once per second
+    if (elapsed != panel->last_elapsed_s_) {
         panel->last_elapsed_s_ = elapsed;
         panel->set_message(std::string(panel->job_target_ == Mode::Server ? "Enabling server mode… "
                                                                           : "Restoring desktop… ") +
@@ -214,7 +214,7 @@ bool ServerPanel::key_cb(uint32_t key, void* user_data) {
 
 bool ServerPanel::on_key(uint32_t key) {
     if (job_.running()) {
-        return true; // ignore keys while a switch is running
+        return true;
     }
     if (key == kKeyTab) {
         view_model_.show_butter_page(); // settings page
@@ -225,7 +225,7 @@ bool ServerPanel::on_key(uint32_t key) {
         return true;
     }
     if (edit_password(password_, key)) {
-        update_password_label();
+        update_password_row();
         return true;
     }
     return false;
@@ -270,7 +270,7 @@ void ServerPanel::refresh_status() {
     set_text_if_changed(detail_label_, text);
 }
 
-void ServerPanel::update_password_label() {
+void ServerPanel::update_password_row() {
     set_text_if_changed(password_label_, password_text(password_).c_str());
 }
 
@@ -296,7 +296,7 @@ void ServerPanel::start_switch() {
         const auto groups = settings::load_enabled_groups();
         if (groups.empty()) {
             SudoJob::wipe(password_);
-            update_password_label();
+            update_password_row();
             set_message("Nothing selected in settings", Tone::Warning);
             return;
         }
@@ -310,7 +310,7 @@ void ServerPanel::start_switch() {
 
     std::string error;
     const bool started = job_.start(password_, argv, error);
-    update_password_label();
+    update_password_row();
     if (!started) {
         set_message("Failed to start: " + error, Tone::Error);
         return;

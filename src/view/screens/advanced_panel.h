@@ -1,6 +1,5 @@
 /*
- * Settings page: which services server mode stops (instant) and boot-time
- * tweaks that need a reboot (GPU memory, boot into server mode, HDMI, camera, cloud-init).
+ * Settings page: the groups server mode stops and the boot-time tweaks.
  *
  * SPDX-License-Identifier: MIT
  */
@@ -42,9 +41,8 @@ private:
     enum class Kind { Header, Group, Gpu, Flag, Reset };
     enum class Prompt { None, Apply, Reset }; // what Enter in the password prompt does
 
-    // One row. Which fields matter depends on kind:
     // Group uses group + value, Flag uses flag + value, Gpu uses gpu
-    // (nullopt: config.txt has a value that is not one of kGpuChoices, kept until changed).
+    // (nullopt: config.txt has a value not in kGpuChoices, kept until changed).
     struct Item {
         Kind kind{Kind::Header};
         std::string_view title;
@@ -53,34 +51,34 @@ private:
         bool value{false};
         std::optional<settings::GpuMemory> gpu = std::nullopt;
         lv_obj_t* row{nullptr};
-        lv_obj_t* label{nullptr};       // name, left
-        lv_obj_t* value_label{nullptr}; // state, right
+        lv_obj_t* label{nullptr};
+        lv_obj_t* value_label{nullptr};
     };
 
     static void tick_cb(lv_timer_t* timer);
     static bool key_cb(uint32_t key, void* user_data);
 
     void on_key(uint32_t key); // takes every key: nothing reaches the template navigation
+    void add_item(Item item);
     void load_status();
     settings::GroupSet enabled_groups() const;
     bool boot_groups_outdated() const;
     bool item_changed(const Item& item) const;
     bool has_boot_changes() const;
-    bool boot_server_chosen() const;
     std::vector<std::string> changed_args() const;
-    void add_item(Item item);
+    bool boot_server_chosen() const;
     void render_item(size_t index);
     void render_all();
     void move_selection(int delta);
-    void change_value(int delta);
     bool save_groups();
+    void change_value(int delta);
     void ask_password(Prompt prompt);
     void cancel_password();
+    void update_password_row();
+    void set_message(const std::string& text, Tone tone);
+    void set_busy(bool busy);
     void start_job();
     void finish_job(const JobResult& result);
-    void set_message(const std::string& text, Tone tone);
-    void update_password_row();
-    void set_busy(bool busy);
 
     viewmodel::BaseViewModel& view_model_;
     const lv_font_t* row_font_{nullptr};

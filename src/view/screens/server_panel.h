@@ -1,6 +1,5 @@
 /*
- * Server Mode main panel: memory state and the switch between the normal
- * desktop and the lean server mode.
+ * Server Mode main panel: memory state and the normal/server mode switch.
  *
  * SPDX-License-Identifier: MIT
  */
@@ -41,14 +40,14 @@ private:
     static bool key_cb(uint32_t key, void* user_data);
 
     bool on_key(uint32_t key);
-    void refresh_status();
     bool desktop_running();
+    void refresh_status();
+    void update_password_row();
+    void set_message(const std::string& text, Tone tone);
+    void set_busy(bool busy);
     void start_switch();
     void finish_switch(const JobResult& result);
     static std::string success_summary(const std::string& output);
-    void set_message(const std::string& text, Tone tone);
-    void update_password_label();
-    void set_busy(bool busy);
 
     viewmodel::BaseViewModel& view_model_;
     lv_obj_t* mode_label_{nullptr};
@@ -59,12 +58,12 @@ private:
     lv_timer_t* timer_{nullptr};
 
     Mode mode_{Mode::Normal};
-    Mode job_target_{Mode::Server}; // the mode the running switch goes to
+    Mode job_target_{Mode::Server};
     uint32_t last_elapsed_s_{UINT32_MAX};
     std::string password_;
     SudoJob job_;
 
-    // desktop detection: remember labwc's pid, rescan /proc only now and then
+    // labwc's pid is cached: /proc is rescanned only every kProcRescanMs
     pid_t desktop_pid_{-1};
     uint32_t last_proc_scan_tick_{0};
     bool proc_scanned_{false};

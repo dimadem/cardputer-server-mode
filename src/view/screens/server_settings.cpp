@@ -20,10 +20,10 @@ namespace {
 
 std::filesystem::path groups_file() {
     std::filesystem::path root;
-    if (const char* xdg = std::getenv("XDG_CONFIG_HOME"); xdg && xdg[0] == '/') {
+    if (const char* xdg = std::getenv("XDG_CONFIG_HOME"); xdg != nullptr && xdg[0] == '/') {
         root = xdg;
     }
-    else if (const char* home = std::getenv("HOME"); home && home[0] == '/') {
+    else if (const char* home = std::getenv("HOME"); home != nullptr && home[0] == '/') {
         root = std::filesystem::path(home) / ".config";
     }
     else {
@@ -33,16 +33,24 @@ std::filesystem::path groups_file() {
 }
 
 std::optional<bool> parse_bool(std::string_view text) {
-    if (text == "1") return true;
-    if (text == "0") return false;
+    if (text == "1") {
+        return true;
+    }
+    if (text == "0") {
+        return false;
+    }
     return std::nullopt;
 }
 
 std::optional<int> parse_int(std::string_view text) {
-    if (text.empty() || text.size() > 6) return std::nullopt;
+    if (text.empty() || text.size() > 6) {
+        return std::nullopt;
+    }
     int value = 0;
     for (const char ch : text) {
-        if (ch < '0' || ch > '9') return std::nullopt;
+        if (ch < '0' || ch > '9') {
+            return std::nullopt;
+        }
         value = value * 10 + (ch - '0');
     }
     return value;
@@ -59,11 +67,11 @@ std::string_view script_name(Script script) {
 
 } // namespace
 
-// ---- service groups
-
 std::optional<StopGroup> parse_group(std::string_view id) {
     for (const auto& info : kStopGroups) {
-        if (info.id == id) return info.group;
+        if (info.id == id) {
+            return info.group;
+        }
     }
     return std::nullopt;
 }
@@ -80,7 +88,9 @@ std::optional<GroupSet> GroupSet::parse_csv(std::string_view csv) {
         const size_t comma = csv.find(',');
         const std::string_view id = csv.substr(0, comma);
         const auto group = parse_group(id);
-        if (!group) return std::nullopt;
+        if (!group) {
+            return std::nullopt;
+        }
         set.set(*group, true);
         csv = comma == std::string_view::npos ? std::string_view{} : csv.substr(comma + 1);
     }
@@ -90,7 +100,9 @@ std::optional<GroupSet> GroupSet::parse_csv(std::string_view csv) {
 std::vector<std::string> GroupSet::ids() const {
     std::vector<std::string> result;
     for (const auto& info : kStopGroups) {
-        if (contains(info.group)) result.emplace_back(info.id);
+        if (contains(info.group)) {
+            result.emplace_back(info.id);
+        }
     }
     return result;
 }
@@ -98,7 +110,9 @@ std::vector<std::string> GroupSet::ids() const {
 std::string GroupSet::csv() const {
     std::string result;
     for (const auto& id : ids()) {
-        if (!result.empty()) result += ',';
+        if (!result.empty()) {
+            result += ',';
+        }
         result += id;
     }
     return result;
@@ -112,8 +126,9 @@ GroupSet load_enabled_groups() {
     GroupSet result;
     std::string line;
     while (std::getline(file, line)) {
-        if (const auto group = parse_group(line))
+        if (const auto group = parse_group(line)) {
             result.set(*group, true); // unknown lines are ignored
+        }
     }
     return result;
 }
@@ -127,7 +142,9 @@ bool save_enabled_groups(const GroupSet& groups) {
     temp += ".tmp";
     {
         std::ofstream file(temp, std::ios::trunc);
-        for (const auto& id : groups.ids()) file << id << "\n";
+        for (const auto& id : groups.ids()) {
+            file << id << "\n";
+        }
         file.close();
         if (!file) {
             std::filesystem::remove(temp, ec);
@@ -138,18 +155,16 @@ bool save_enabled_groups(const GroupSet& groups) {
     return !ec;
 }
 
-// ---- scripts
-
 // Fixed at build time: the scripts run as root, so no environment override.
 std::string script_path(Script script) {
     return std::string(CZ_SCRIPT_DIR) + "/" + std::string(script_name(script));
 }
 
-// ---- boot status
-
 std::optional<GpuMemory> gpu_from_megabytes(int mb) {
     for (const GpuMemory gpu : kGpuChoices) {
-        if (megabytes(gpu) == mb) return gpu;
+        if (megabytes(gpu) == mb) {
+            return gpu;
+        }
     }
     return std::nullopt;
 }
@@ -180,11 +195,15 @@ std::optional<BootStatus> parse_boot_status(std::string_view text) {
     std::string token;
     while (stream >> token) {
         const auto eq = token.find('=');
-        if (eq != std::string::npos) values[token.substr(0, eq)] = token.substr(eq + 1);
+        if (eq != std::string::npos) {
+            values[token.substr(0, eq)] = token.substr(eq + 1);
+        }
     }
     const auto value = [&values](std::string_view key) -> std::optional<std::string_view> {
         const auto it = values.find(key);
-        if (it == values.end()) return std::nullopt;
+        if (it == values.end()) {
+            return std::nullopt;
+        }
         return std::string_view(it->second);
     };
     const auto boolean = [&value](std::string_view key) -> std::optional<bool> {
@@ -207,7 +226,9 @@ std::optional<BootStatus> parse_boot_status(std::string_view text) {
     }
     // a unit without a group list (or none at all) stops every group
     const auto groups = groups_text->empty() ? GroupSet::all() : GroupSet::parse_csv(*groups_text);
-    if (!groups) return std::nullopt;
+    if (!groups) {
+        return std::nullopt;
+    }
 
     status.gpu_mb = *gpu_mb;
     status.boot_server = *boot_server;
@@ -223,12 +244,14 @@ std::optional<BootStatus> read_boot_status() {
     const std::string command = script_path(Script::Advanced) + " status 2>/dev/null";
     // NOLINTNEXTLINE(bugprone-command-processor): fixed path set at build time, no user input
     FILE* pipe = popen(command.c_str(), "r");
-    if (!pipe) {
+    if (pipe == nullptr) {
         return std::nullopt;
     }
     char buffer[256];
     std::string output;
-    while (std::fgets(buffer, sizeof(buffer), pipe)) output += buffer;
+    while (std::fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+        output += buffer;
+    }
     if (pclose(pipe) != 0) {
         return std::nullopt;
     }

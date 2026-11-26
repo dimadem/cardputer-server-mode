@@ -20,7 +20,7 @@ BOOT_UNIT=/etc/systemd/system/cz-server-mode-boot.service
 HDMI_ARG="video=HDMI-A-1:d"
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 
-# copy $1 to $2 through a synced temp file, so $2 is never written half-way
+# atomic_copy: copy $1 to $2 through a synced temp file, so $2 is never written half-way
 atomic_copy() {
   cp "$1" "$2.cz-tmp"
   sync "$2.cz-tmp"
@@ -28,14 +28,14 @@ atomic_copy() {
   sync
 }
 
-# gpu_mem lines that the CM0 reads: before any [section] or under [all]
+# gpu_value: gpu_mem from file $1, from the lines the CM0 reads (before any [section] or under [all])
 gpu_value() {
   awk '/^[[:space:]]*\[/ { s = $0; gsub(/[][[:space:]]/, "", s); next }
        (s == "" || s == "all") && /^[[:space:]]*gpu_mem=/ { sub(/^[[:space:]]*gpu_mem=/, ""); v = $0 + 0 }
        END { if (v != "") print v }' "$1"
 }
 
-# set gpu_mem=$2 in file $1: replace the lines gpu_value reads, else add one under [all]
+# set_gpu: set gpu_mem=$2 in file $1: replace the lines gpu_value reads, else add one under [all]
 set_gpu() {
   awk -v val="$2" '
     /^[[:space:]]*\[/ { s = $0; gsub(/[][[:space:]]/, "", s); print; next }
@@ -63,7 +63,8 @@ status() {
        "boot_groups=${groups}"
 }
 
-set_boot_server() {  # $1 = 0|1, $2 = groups separated by spaces (not empty)
+# set_boot_server: $1 = 0|1, $2 = groups separated by spaces (not empty)
+set_boot_server() {
   if [ "$1" = 1 ]; then
     cat > "$BOOT_UNIT.cz-tmp" <<EOF
 [Unit]
@@ -104,19 +105,24 @@ reboot_soon() {
   systemd-run --quiet --on-active=3 --timer-property=AccuracySec=100ms systemctl reboot
 }
 
-bool_arg() {  # $1 = key, $2 = value: only 0 or 1
+# bool_arg: exit 2 unless value $2 of key $1 is 0 or 1
+bool_arg() {
   case "$2" in 0|1) ;; *) echo "bad value for $1: $2 (0 or 1)" >&2; exit 2 ;; esac
 }
 
 apply() {
   need_root
-  # 1. check all arguments before anything changes
+  # all arguments are checked before anything changes
   local do_reboot=0 gpu="" camera_off="" hdmi_off="" boot_server="" groups="" has_groups=0
   local cloudinit_off="" kv k v g
   for kv in "$@"; do
-    [ "$kv" = --reboot ] && { do_reboot=1; continue; }
+    if [ "$kv" = --reboot ]; then
+      do_reboot=1
+      continue
+    fi
     case "$kv" in *=*) ;; *) echo "bad argument: $kv (key=value)" >&2; exit 2 ;; esac
-    k=${kv%%=*}; v=${kv#*=}
+    k=${kv%%=*}
+    v=${kv#*=}
     case "$k" in
       gpu) case "$v" in 16|32|64|128) gpu=$v ;; *) echo "bad gpu value: $v" >&2; exit 2 ;; esac ;;
       camera_off) bool_arg "$k" "$v"; camera_off=$v ;;
@@ -124,19 +130,25 @@ apply() {
       cloudinit_off) bool_arg "$k" "$v"; cloudinit_off=$v ;;
       boot_server) bool_arg "$k" "$v"; boot_server=$v ;;
       groups)
-        has_groups=1; groups=${v//,/ }
+        has_groups=1
+        groups=${v//,/ }
         [ -n "$groups" ] || { echo "groups: give at least one group" >&2; exit 2; }
-        for g in $groups; do group_units "$g" >/dev/null || { echo "unknown group: $g" >&2; exit 2; }; done ;;
+        for g in $groups; do
+          group_units "$g" >/dev/null || { echo "unknown group: $g" >&2; exit 2; }
+        done
+        ;;
       *) echo "unknown key: $k" >&2; exit 2 ;;
     esac
   done
   # groups alone (boot_server already on) rewrite the unit with the new selection
-  if [ -z "$boot_server" ] && [ $has_groups = 1 ] && [ -f "$BOOT_UNIT" ]; then boot_server=1; fi
+  if [ -z "$boot_server" ] && [ "$has_groups" = 1 ] && [ -f "$BOOT_UNIT" ]; then
+    boot_server=1
+  fi
   if [ "$boot_server" = 1 ] && [ -z "$groups" ]; then
-    echo "boot_server=1 needs groups=..." >&2; exit 2
+    echo "boot_server=1 needs groups=..." >&2
+    exit 2
   fi
 
-  # 2. apply
   take_lock
   # a backup that is missing or empty (power cut during the first apply) is made again
   [ -s "$ORIG_CFG" ] || atomic_copy "$CFG" "$ORIG_CFG"
@@ -166,7 +178,7 @@ apply() {
   [ -n "$boot_server" ] && set_boot_server "$boot_server" "$groups"
   sync
   echo "applied: $(status)"
-  [ $do_reboot = 1 ] && reboot_soon
+  [ "$do_reboot" = 1 ] && reboot_soon
   return 0
 }
 
@@ -176,11 +188,18 @@ reset() {
   local f
   for f in "$ORIG_CFG" "$ORIG_CMD"; do
     # an empty backup is broken: keep the live file and the backup, and stop
-    if [ -e "$f" ] && [ ! -s "$f" ]; then echo "backup is empty, not restored: $f" >&2; exit 1; fi
+    if [ -e "$f" ] && [ ! -s "$f" ]; then
+      echo "backup is empty, not restored: $f" >&2
+      exit 1
+    fi
   done
-  if [ -e "$ORIG_CFG" ]; then atomic_copy "$ORIG_CFG" "$CFG"; fi
-  if [ -e "$ORIG_CMD" ]; then atomic_copy "$ORIG_CMD" "$CMD"; fi
-  rm -f "$ORIG_CFG" "$ORIG_CMD"   # only after both restores are on disk
+  if [ -e "$ORIG_CFG" ]; then
+    atomic_copy "$ORIG_CFG" "$CFG"
+  fi
+  if [ -e "$ORIG_CMD" ]; then
+    atomic_copy "$ORIG_CMD" "$CMD"
+  fi
+  rm -f "$ORIG_CFG" "$ORIG_CMD" # only after both restores are on disk
   set_boot_server 0 ""
   rm -f "$CLOUD_OFF"
   sync

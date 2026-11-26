@@ -45,7 +45,6 @@ inline void set_tone_text(lv_obj_t* label, const std::string& text, Tone tone, b
     lv_obj_set_style_text_color(label, tone_color(view::palette(dark_mode), tone), 0);
 }
 
-// One-line themed label used by both panels.
 inline lv_obj_t* make_label(lv_obj_t* parent,
                             const lv_font_t* font,
                             const lv_font_t* fallback,
@@ -53,13 +52,13 @@ inline lv_obj_t* make_label(lv_obj_t* parent,
     auto* label = lv_label_create(parent);
     lv_obj_set_width(label, LV_PCT(100));
     lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_font(label, font ? font : fallback, 0);
+    lv_obj_set_style_text_font(label, font != nullptr ? font : fallback, 0);
     reactive::bind_theme(label, dark_mode_subject, reactive::ThemeRole::Text);
     lv_label_set_text(label, "");
     return label;
 }
 
-// Shared password editing: returns true when the key was a password edit.
+// Returns true when the key was a password edit.
 // The string is reserved once (kMaxPassword + 1 for the newline SudoJob adds),
 // so typing never reallocates and leaves no stale copies behind.
 inline bool edit_password(std::string& password, uint32_t key) {
@@ -79,7 +78,9 @@ inline bool edit_password(std::string& password, uint32_t key) {
         return true;
     }
     if (key >= 32 && key <= 126) {
-        if (password.size() < kMaxPassword) password.push_back(static_cast<char>(key));
+        if (password.size() < kMaxPassword) {
+            password.push_back(static_cast<char>(key));
+        }
         return true;
     }
     return false;

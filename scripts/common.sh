@@ -13,12 +13,12 @@ ALL_GROUPS="desktop printing packagekit portals accounts nfs"
 
 group_units() {
   case "$1" in
-    desktop)    echo "lightdm.service wayvnc-control.service" ;;   # whole Raspberry Pi desktop + HDMI output
+    desktop)    echo "lightdm.service wayvnc-control.service" ;;
     printing)   echo "cups.service cups-browsed.service cups.socket cups.path" ;;
     packagekit) echo "packagekit.service" ;;
     accounts)   echo "accounts-daemon.service" ;;
     nfs)        echo "rpcbind.service rpcbind.socket nfs-blkmap.service" ;;
-    portals)    echo "" ;;                                          # user units, see USER_UNITS
+    portals)    echo "" ;; # user units, see USER_UNITS
     *) return 1 ;;
   esac
 }
@@ -34,23 +34,28 @@ unit_exists() { systemctl cat "$1" >/dev/null 2>&1; }
 
 need_root() { [ "$(id -u)" = 0 ] || { echo "run as root (sudo)" >&2; exit 1; }; }
 
-# One switch at a time: the app, the boot unit and ssh sessions all go through this lock.
+# take_lock: one switch at a time (the app, the boot unit and ssh sessions all take it)
 take_lock() {
   exec 9>"$LOCK_FILE"
   flock -n 9 || { echo "busy: another switch is running" >&2; exit 3; }
 }
 
-# the desktop/launcher user: SUDO_USER, else the owner of the APPLaunch process (may be empty at boot)
+# target_user: SUDO_USER, else the owner of the APPLaunch process (may be empty at boot)
 target_user() {
-  if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then echo "$SUDO_USER"; return; fi
-  local pid; pid=$(pgrep -f '^/usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch' | head -1)
+  if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
+    echo "$SUDO_USER"
+    return
+  fi
+  local pid
+  pid=$(pgrep -f '^/usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch' | head -1)
   [ -n "$pid" ] && ps -o user= -p "$pid" | tr -d ' '
 }
 
-# systemctl --user for the target user (resolved once per script run)
+# user_systemctl: systemctl --user for the target user (resolved once per script run)
 user_systemctl() {
   if [ -z "${TARGET_UID:-}" ]; then
-    TARGET_USER=$(target_user); [ -n "$TARGET_USER" ] || return 1
+    TARGET_USER=$(target_user)
+    [ -n "$TARGET_USER" ] || return 1
     TARGET_UID=$(id -u "$TARGET_USER") || return 1
   fi
   runuser -u "$TARGET_USER" -- env XDG_RUNTIME_DIR="/run/user/$TARGET_UID" \

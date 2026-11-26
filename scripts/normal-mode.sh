@@ -7,7 +7,10 @@ set -u
 need_root
 
 take_lock
-if [ ! -f "$STATE_FILE" ]; then echo "already in normal mode"; exit 0; fi
+if [ ! -f "$STATE_FILE" ]; then
+  echo "already in normal mode"
+  exit 0
+fi
 before=$(mem_avail_mb)
 
 # reverse order: sockets/helpers first, lightdm (recorded first) last
@@ -15,8 +18,13 @@ failed_units=""
 for u in $(tac "$STATE_FILE"); do
   case " $ON_DEMAND_UNITS " in *" $u "*) continue ;; esac
   unit_exists "$u" || { echo "not installed, skipped: $u"; continue; }
-  # prepend: the file keeps the original order, so the next retry also runs in reverse
-  if systemctl start "$u"; then echo "started: $u"; else echo "failed to start: $u" >&2; failed_units=" $u$failed_units"; fi
+  if systemctl start "$u"; then
+    echo "started: $u"
+  else
+    echo "failed to start: $u" >&2
+    # prepend: the file keeps the original order, so the next retry also runs in reverse
+    failed_units=" $u$failed_units"
+  fi
 done
 
 if [ -n "$failed_units" ]; then
