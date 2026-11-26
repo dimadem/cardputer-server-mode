@@ -412,15 +412,11 @@ void AdvancedPanel::on_key(uint32_t key) {
 
 void AdvancedPanel::update_password_label() {
     const auto colors = view::palette(view_model_.is_dark_mode());
-    // the password row is shown only while a password is asked: Enter is in the hint line
-    if (prompt_ != Prompt::None) {
-        set_text_if_changed(password_label_, password_text(password_).c_str());
-        lv_obj_set_style_text_color(password_label_, colors.text, 0);
-        lv_obj_remove_flag(password_label_, LV_OBJ_FLAG_HIDDEN);
-    }
-    else {
-        lv_obj_add_flag(password_label_, LV_OBJ_FLAG_HIDDEN);
-    }
+    // the password row is empty until a password is asked (Enter is in the hint line);
+    // it keeps its height, so the hint line stays at the bottom
+    set_text_if_changed(password_label_,
+                        prompt_ != Prompt::None ? password_text(password_).c_str() : "");
+    lv_obj_set_style_text_color(password_label_, colors.text, 0);
 }
 
 void AdvancedPanel::ask_password(Prompt prompt) {
