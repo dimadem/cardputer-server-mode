@@ -81,16 +81,16 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 EOF
     mv -f "$BOOT_UNIT.cz-tmp" "$BOOT_UNIT"
-    systemctl daemon-reload
-    systemctl enable --quiet cz-server-mode-boot.service
-    systemctl set-default multi-user.target >/dev/null
+    systemctl enable --quiet --no-reload cz-server-mode-boot.service
+    systemctl set-default --quiet --no-reload multi-user.target
   else
     [ -f "$BOOT_UNIT" ] || return 0
-    systemctl disable cz-server-mode-boot.service >/dev/null 2>&1 || true
+    systemctl disable --quiet --no-reload cz-server-mode-boot.service || true
     rm -f "$BOOT_UNIT"
-    systemctl daemon-reload
-    systemctl set-default graphical.target >/dev/null
+    systemctl set-default --quiet --no-reload graphical.target
   fi
+  # one reload for all the changes above: each one takes 3-4 s on the CM0
+  systemctl daemon-reload
 }
 
 reboot_soon() {
@@ -100,7 +100,8 @@ reboot_soon() {
   mkdir -p "$d" && printf '[Service]\nTimeoutStopSec=2\n' > "$d/cz-fast-stop.conf"
   user_systemctl daemon-reload 2>/dev/null || true
   echo "rebooting in 3 s"
-  systemd-run --quiet --on-active=3 systemctl reboot
+  # the default timer accuracy is 1 min: without AccuracySec the reboot came 11 s late
+  systemd-run --quiet --on-active=3 --timer-property=AccuracySec=100ms systemctl reboot
 }
 
 bool_arg() {  # $1 = key, $2 = value: only 0 or 1
