@@ -19,6 +19,7 @@ namespace {
 
 constexpr uint32_t kJobPeriodMs = 200;
 constexpr int kListHeight = 94;
+constexpr const char* kHint = "↑↓ select · ←→ change · Enter apply · Tab back";
 
 } // namespace
 
@@ -88,7 +89,7 @@ AdvancedPanel::AdvancedPanel(lv_obj_t* content,
         set_message("Boot status unavailable: reboot options disabled", Tone::Error);
     }
     else {
-        set_message("↑↓ select · ←→ change · Tab back", Tone::Info);
+        set_message(kHint, Tone::Info);
     }
 
     platform::set_screen_key_handler(key_cb, this);
@@ -411,13 +412,14 @@ void AdvancedPanel::on_key(uint32_t key) {
 
 void AdvancedPanel::update_password_label() {
     const auto colors = view::palette(view_model_.is_dark_mode());
+    // the password row is shown only while a password is asked: Enter is in the hint line
     if (prompt_ != Prompt::None) {
         set_text_if_changed(password_label_, password_text(password_).c_str());
         lv_obj_set_style_text_color(password_label_, colors.text, 0);
+        lv_obj_remove_flag(password_label_, LV_OBJ_FLAG_HIDDEN);
     }
     else {
-        set_text_if_changed(password_label_, "Enter: apply with reboot");
-        lv_obj_set_style_text_color(password_label_, colors.text_disabled, 0);
+        lv_obj_add_flag(password_label_, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
@@ -433,7 +435,7 @@ void AdvancedPanel::cancel_password() {
     prompt_ = Prompt::None;
     SudoJob::wipe(password_);
     update_password_label();
-    set_message("Cancelled", Tone::Info);
+    set_message(kHint, Tone::Info);
 }
 
 void AdvancedPanel::set_busy(bool busy) {
