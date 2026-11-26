@@ -1,0 +1,92 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    name: Build the package
+    runs-on: ubuntu-24.04-arm
+    container: debian:trixie
+    steps:
+      - name: Install the build packages
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git build-essential cmake ninja-build \
+            libpng-dev libjpeg-dev libfmt-dev libfreetype-dev zlib1g-dev python3-venv
+
+      - uses: actions/checkout@v7
+
+      - name: Configure
+        run: cmake --preset cp0-device -DAPP_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: cmake --build --preset cp0-device-rel -j"$(nproc)"
+
+      - name: Package
+        run: |
+          cpack --preset cp0-device-deb
+          dpkg-deb --info dist/*.deb
+          dpkg-deb --contents dist/*.deb
+
+      - name: Compare the tag with the project version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          version="${version%%-*}"
+          if ! ls dist/ServerMode_"${version}"_*_arm64.deb >/dev/null 2>&1; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match the version in CMakeLists.txt"
+            exit 1
+          fi
+
+      - name: Install the check tools
+        run: |
+          python3 -m venv "$HOME/.cache/cz-lint-venv"
+          "$HOME/.cache/cz-lint-venv/bin/pip" install --quiet clang-format clang-tidy cppcheck shellcheck-py
+
+      - name: Static checks
+        run: tools/check.sh
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: deb
+          path: dist/*.deb
+          if-no-files-found: error
+
+  release:
+    name: Publish the release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: deb
+          path: dist
+
+      - name: Upload the package to the release
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.deb --clobber
+          else
+            flags=(--title "$TAG" --generate-notes --verify-tag)
+            [[ "$TAG" == *-* ]] && flags+=(--prerelease)
+            gh release create "$TAG" dist/*.deb "${flags[@]}"
+          fi
